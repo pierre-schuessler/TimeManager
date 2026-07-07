@@ -25,8 +25,6 @@ function Load() {
     let savedAgenda = localStorage.getItem("agenda")
     let parsedAgenda = savedAgenda ? JSON.parse(savedAgenda) : []
     
-    
-    
     state.agenda = parsedAgenda.map(item => {
         if (typeof item === 'number') return new Date(item).toISOString();
         if (typeof item === 'string' && item.includes('-') && !item.includes('T')) return null; 
@@ -46,6 +44,38 @@ function Save() {
     localStorage.setItem("tasks", JSON.stringify(tasksToSave))
     localStorage.setItem("agenda", JSON.stringify(state.agenda))
 }
+
+// --- NEW QUEUED DING LOGIC ---
+let dingQueue = [];
+let isDinging = false;
+
+function processDingQueue() {
+    if (dingQueue.length === 0) {
+        isDinging = false;
+        return;
+    }
+    isDinging = true;
+    
+    const n = dingQueue.shift();
+    
+    for (let i = 0; i < n; i++) {
+        setTimeout(() => {
+            const audio = new Audio('ding.mp3');
+            audio.play();
+        }, i * 500);
+    }
+    
+    // Wait for this set of dings to finish (n * 500) plus an 800ms pause before the next set
+    setTimeout(processDingQueue, (n * 500) + 800);
+}
+
+function ding(n){
+    dingQueue.push(n);
+    if (!isDinging) {
+        processDingQueue();
+    }
+}
+// ------------------------------
 
 function createNewTask(){
     let times = {}
@@ -93,19 +123,64 @@ function toggleTask(id, UITarget){
         interval = setInterval(()=>{
             let elapsedTime = (new Date().getTime() - startTime) / 1000
 
-            state.timeScales.forEach((scale)=>{
-                task.times[scale.id].elapsed = Math.round(startCounters[scale.id].elapsed + elapsedTime)
-                task.times[scale.id].elapsed = Math.min(task.times[scale.id].elapsed, task.times[scale.id].goal)
+            // Snapshot states BEFORE adding elapsed time
+            const wasAllCompleted = state.timeScales.every(scale =>
+                task.times[scale.id].elapsed >= task.times[scale.id].goal
+            );
+
+            const prevScaleCompletion = {};
+            state.timeScales.forEach(scale => {
+                const totals = state.tasks.reduce((acc, t) => {
+                    acc.elapsed += Math.min(Number(t.times[scale.id]?.elapsed) || 0, Number(t.times[scale.id]?.goal) || 0);
+                    acc.goal += Number(t.times[scale.id]?.goal) || 0;
+                    return acc;
+                }, { elapsed: 0, goal: 0 });
+                prevScaleCompletion[scale.id] = totals.goal > 0 && totals.elapsed >= totals.goal;
             });
 
-            let allCompleted = state.timeScales.every((scale)=>{
-                return task.times[scale.id].elapsed >= task.times[scale.id].goal
-            })
-            if (allCompleted) {
-                task.running = false
-                clearInterval(interval);
+            // Update times and track single goal crosses
+            let anyCrossed = false;
+            state.timeScales.forEach(scale => {
+                const newElapsed = Math.round(startCounters[scale.id].elapsed + elapsedTime);
+
+                if (task.times[scale.id].elapsed < task.times[scale.id].goal && newElapsed >= task.times[scale.id].goal) {
+                    anyCrossed = true;
+                }
+
+                task.times[scale.id].elapsed = newElapsed;
+            });
+
+            // Snapshot states AFTER adding elapsed time
+            const isAllCompleted = state.timeScales.every(scale =>
+                task.times[scale.id].elapsed >= task.times[scale.id].goal
+            );
+
+            let scaleFinished = false;
+            state.timeScales.forEach(scale => {
+                const totals = state.tasks.reduce((acc, t) => {
+                    acc.elapsed += Math.min(Number(t.times[scale.id]?.elapsed) || 0, Number(t.times[scale.id]?.goal) || 0);
+                    acc.goal += Number(t.times[scale.id]?.goal) || 0;
+                    return acc;
+                }, { elapsed: 0, goal: 0 });
+
+                const isCompleted = totals.goal > 0 && totals.elapsed >= totals.goal;
+                if (isCompleted && !prevScaleCompletion[scale.id]) {
+                    scaleFinished = true;
+                }
+            });
+
+            // Fire appropriate ding (Queue them sequentially so they don't overwrite each other)
+            if (anyCrossed) {
+                ding(1);
+            }
+            if (isAllCompleted && !wasAllCompleted) {
+                ding(2);
+            }
+            if (scaleFinished) {
+                ding(3);
             }
 
+            // Handle scale resets based on duration
             state.timeScales.forEach((scale)=>{
                 if (new Date(scale.start).getTime() + scale.duration * 24 * 60 * 60 * 1000 < new Date().getTime()) {
                     scale.start = new Date().toISOString()
@@ -138,7 +213,6 @@ function editTask(id) {
         </div>
         ${
             state.timeScales.map((scale) => {
-                // Convert stored seconds into Hours, Minutes, and Seconds for the UI
                 const totalSecs = task.times[scale.id].goal || 0;
                 const h = Math.floor(totalSecs / 3600);
                 const m = Math.floor((totalSecs % 3600) / 60);
@@ -171,17 +245,14 @@ function editTask(id) {
         
         try {
             task.times = state.timeScales.reduce((acc, scale) => {
-                // Read the separate inputs, defaulting to 0 if the user leaves them blank
                 const h = parseInt(document.getElementById(`modal-task-${scale.id}-h`).value) || 0;
                 const m = parseInt(document.getElementById(`modal-task-${scale.id}-m`).value) || 0;
                 const s = parseInt(document.getElementById(`modal-task-${scale.id}-s`).value) || 0;
 
-                // Validate that we don't have negative numbers
                 if (h < 0 || m < 0 || s < 0) {
                     throw new Error("Time values cannot be negative.");
                 }
 
-                // Convert back to total seconds for the database/state
                 const newGoal = (h * 3600) + (m * 60) + s;
 
                 acc[scale.id] = {
@@ -192,7 +263,7 @@ function editTask(id) {
             }, {});
         } catch (error) {
             alert("Invalid time input. Please check your values and try again.");
-            return; // Stop the save process if validation failed
+            return;
         }
 
         Save();
@@ -228,7 +299,7 @@ function RenderTasks() {
                                             <div class="task-progress-row">
                                                 <div class="task-progress-meta">
                                                     <span>${scale.name}</span>
-                                                    <span>${task.times[scale.id].elapsed} / ${task.times[scale.id].goal}</span>
+                                                    <span>${new Date(task.times[scale.id].elapsed * 1000).toISOString().substring(11, 19)} / ${new Date(task.times[scale.id].goal * 1000).toISOString().substring(11, 19)}</span>
                                                 </div>
                                                 <div class="progress-bar task-progress-bar">
                                                     <div class="progress-bar-fill" style="width: ${progress}%;"></div>
@@ -326,7 +397,8 @@ function RenderTimeScales(agendaData = state.agenda) {
             <div class="time-scale" style="text-align: center; cursor: pointer;" onclick="addTimeScale()">+ New Time Scale</div>
             ${state.timeScales.map((scale)=>{
                 const totals = state.tasks.reduce((acc, task) => {
-                    acc.elapsed += Number(task.times[scale.id]?.elapsed) || 0;
+                    // Capped with Math.min to avoid overcounting past the goals.
+                    acc.elapsed += Math.min(Number(task.times[scale.id]?.elapsed) || 0, Number(task.times[scale.id]?.goal) || 0); 
                     acc.goal += Number(task.times[scale.id]?.goal) || 0;
                     return acc;
                 }, { elapsed: 0, goal: 0 });
@@ -345,7 +417,6 @@ function RenderTimeScales(agendaData = state.agenda) {
                 let totalExcludedTimeMs = 0;
                 let passedExcludedTimeMs = 0;
 
-                
                 agendaData.forEach(blockStartIso => {
                     const blockStartMs = new Date(blockStartIso).getTime();
                     const blockEndMs = blockStartMs + slotDurationMs;
@@ -385,7 +456,7 @@ function RenderTimeScales(agendaData = state.agenda) {
                             <div class="time-scale-progress-block">
                                 <div class="time-scale-progress-meta">
                                     <span>Tasks</span>
-                                    <span>${totals.elapsed} / ${totals.goal} sec</span>
+                                    <span>${new Date(totals.elapsed * 1000).toISOString().substring(11, 19)} / ${new Date(totals.goal * 1000).toISOString().substring(11, 19)}</span>
                                 </div>
                                 <div class="progress-bar">
                                     <div class="progress-bar-fill" style="width: ${taskPercentage}%;"></div>
@@ -439,9 +510,8 @@ function resetTimes(){
     RenderTimeScales()
 }
 
-function RenderAgenda() { // Function to be rewriten
+function RenderAgenda() { 
     const container = document.getElementById("root-agenda");
-    
     
     const baseDate = new Date();
     baseDate.setHours(0, 0, 0, 0);
