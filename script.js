@@ -45,7 +45,7 @@ function Save() {
     localStorage.setItem("agenda", JSON.stringify(state.agenda))
 }
 
-// --- NEW QUEUED DING LOGIC ---
+
 let dingQueue = [];
 let isDinging = false;
 
@@ -65,7 +65,7 @@ function processDingQueue() {
         }, i * 500);
     }
     
-    // Wait for this set of dings to finish (n * 500) plus an 800ms pause before the next set
+    
     setTimeout(processDingQueue, (n * 500) + 800);
 }
 
@@ -75,7 +75,12 @@ function ding(n){
         processDingQueue();
     }
 }
-// ------------------------------
+
+function ring(){
+    const audio = new Audio('ring.mp3');
+    audio.play();
+}
+
 
 function createNewTask(){
     let times = {}
@@ -123,7 +128,7 @@ function toggleTask(id, UITarget){
         interval = setInterval(()=>{
             let elapsedTime = (new Date().getTime() - startTime) / 1000
 
-            // Snapshot states BEFORE adding elapsed time
+            
             const wasAllCompleted = state.timeScales.every(scale =>
                 task.times[scale.id].elapsed >= task.times[scale.id].goal
             );
@@ -136,9 +141,10 @@ function toggleTask(id, UITarget){
                     return acc;
                 }, { elapsed: 0, goal: 0 });
                 prevScaleCompletion[scale.id] = totals.goal > 0 && totals.elapsed >= totals.goal;
+                
             });
 
-            // Update times and track single goal crosses
+            
             let anyCrossed = false;
             state.timeScales.forEach(scale => {
                 const newElapsed = Math.round(startCounters[scale.id].elapsed + elapsedTime);
@@ -150,7 +156,7 @@ function toggleTask(id, UITarget){
                 task.times[scale.id].elapsed = newElapsed;
             });
 
-            // Snapshot states AFTER adding elapsed time
+            
             const isAllCompleted = state.timeScales.every(scale =>
                 task.times[scale.id].elapsed >= task.times[scale.id].goal
             );
@@ -169,7 +175,7 @@ function toggleTask(id, UITarget){
                 }
             });
 
-            // Fire appropriate ding (Queue them sequentially so they don't overwrite each other)
+            
             if (anyCrossed) {
                 ding(1);
             }
@@ -180,7 +186,7 @@ function toggleTask(id, UITarget){
                 ding(3);
             }
 
-            // Handle scale resets based on duration
+            
             state.timeScales.forEach((scale)=>{
                 if (new Date(scale.start).getTime() + scale.duration * 24 * 60 * 60 * 1000 < new Date().getTime()) {
                     scale.start = new Date().toISOString()
@@ -397,7 +403,6 @@ function RenderTimeScales(agendaData = state.agenda) {
             <div class="time-scale" style="text-align: center; cursor: pointer;" onclick="addTimeScale()">+ New Time Scale</div>
             ${state.timeScales.map((scale)=>{
                 const totals = state.tasks.reduce((acc, task) => {
-                    // Capped with Math.min to avoid overcounting past the goals.
                     acc.elapsed += Math.min(Number(task.times[scale.id]?.elapsed) || 0, Number(task.times[scale.id]?.goal) || 0); 
                     acc.goal += Number(task.times[scale.id]?.goal) || 0;
                     return acc;
@@ -436,6 +441,27 @@ function RenderTimeScales(agendaData = state.agenda) {
                 const totalTimeMs = rawTotalTimeMs - totalExcludedTimeMs;
                 const rawTimeUsed = currentTime - startTimeMs;
                 const timeUsed = rawTimeUsed - passedExcludedTimeMs;
+
+                const timeRemaining = totalTimeMs - timeUsed;
+                const taskRemaining = totals.goal - totals.elapsed;
+
+                if (taskRemaining > 0 && (timeRemaining - taskRemaining) <= 5 * 60 * 1000) { // ring if the user should start working within the next 5 minutes
+                    if (!scale.hasRung) { 
+                        ring();
+                        document.getElementById("modal-title").innerText = "Time Alert";
+                        document.getElementById("modal-body").innerHTML = `
+                            <p>Time to start working on tasks for the "${scale.name}" time scale!</p>
+                        `;
+                        document.getElementById("btn-submit").innerText = "I'll start working!";
+                        document.getElementById("btn-submit").onclick = function() {
+                            closeModal("modal");
+                        }
+                        openModal("modal")
+                        scale.hasRung = true; 
+                    }
+                } else {
+                    scale.hasRung = false; 
+                }
 
                 const timePercentage = (totalTimeMs > 0 && !isNaN(timeUsed))
                     ? Math.max(0, Math.min(100, (timeUsed / totalTimeMs) * 100))
