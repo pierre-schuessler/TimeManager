@@ -1,28 +1,76 @@
+:root{
+    /* Colors */
+    --background1: hsl(0, 0%, 82%);
+    --background2: hsl(0, 0%, 88%);
+    --background3: hsl(0, 0%, 100%);
+    --primary: hsl(217, 91%, 60%);
+    --text-primary: hsl(0, 0%, 0%);
+    --border-light: #d1d5db;
+    --border-lighter: #e5e7eb;
+    --overlay-bg: rgba(0, 0, 0, 0.5);
+    
+    /* Spacing */
+    --spacing-xs: 0.2rem;
+    --spacing-sm: 0.45rem;
+    --spacing-md: 0.5rem;
+    --spacing-lg: 0.75rem;
+    --spacing-xl: 1rem;
+    --spacing-2xl: 1.5rem;
+    
+    /* Border Radius */
+    --radius-sm: 0.5rem;
+    --radius-md: 0.7rem;
+    --radius-lg: 0.8em;
+    --radius-xl: 1em;
+    
+    /* Font Sizes */
+    --font-xs: 0.55rem;
+    --font-sm: 0.875rem;
+    --font-base: 1rem;
+    --font-lg: 1.5rem;
+    
+    /* Transitions */
+    --transition-fast: 0.2s ease;
+    
+    /* Borders */
+    --border-standard: 1px solid black;
+}
+
+header, main > *, footer{
+    background: var(--background2);
+}
+
 body {
-    margin: 0px;
+    margin: var(--spacing-lg);
+    background: var(--background1)
 }
 
 header {
+    border-radius: var(--radius-xl);
+    border: var(--border-standard);
     height: 5vh;
     display: flex;
-    justify-content: space-between
+    justify-content: space-between;
+    background-color: var(--background2);
 }
 
 main {
-    height: 90vh;
     display: grid;
     grid-template-areas: "tasks agenda"
                           "time-scale agenda";
     grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-xl);
+    margin : var(--spacing-xl) 0px;
 }
 
 main > div {
-    border: 1px solid black;
-    padding: 0.75em;
+    border: var(--border-standard);
+    padding: var(--spacing-lg);
+    border-radius: var(--radius-xl);
 }
 
 footer {
-    height: 90vh;
+    height: 10vh;
 }
 
 #root-tasks {
@@ -39,32 +87,46 @@ footer {
     grid-area: time-scale;
 }
 
+.task:hover, .time-scale:hover
+{
+    background-color: var(--background2);
+}
+
 .task {
     display: block;
     width: 100%;
     box-sizing: border-box;
     padding: 0.65em 0.9em;
-    margin: 0.35em 0;
-    border: 1px solid black;
-    border-radius: 0.8em;
+    margin: var(--spacing-md) 0;
+    border: var(--border-standard);
+    border-radius: var(--radius-lg);
+    background: var(--background3);
 }
 
 .task:not(:first-child){
-    margin-top: 0.5em;
+    margin-top: var(--spacing-md);
+}
+
+.task.active{
+    background: hsl(120, 73%, 75%);
+}
+
+.task.active:hover{ /*slightly darker*/
+    background: hsl(120, 73%, 70%);
 }
 
 .task-main-content {
     width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 0.45rem;
+    gap: var(--spacing-sm);
 }
 
 .task-title-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 0.75rem;
+    gap: var(--spacing-lg);
 }
 
 .task-title {
@@ -74,69 +136,70 @@ footer {
 .task-progress-list {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 0.5rem;
+    gap: var(--spacing-md);
 }
 
 .task-progress-row {
     display: flex;
     flex-direction: column;
-    gap: 0.2rem;
-    padding: 0.45rem 0.6rem;
-    border-radius: 0.7rem;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm) 0.6rem;
+    border-radius: var(--radius-md);
     background: rgba(255, 255, 255, 0.2);
 }
 
 .task-progress-meta {
     display: flex;
     justify-content: space-between;
-    font-size: 0.875rem;
+    font-size: var(--font-sm);
     font-weight: 600;
 }
 
 .task-progress-bar {
-    height: 0.6rem;
+    height: var(--spacing-lg);
 }
 
 .task-actions {
     flex-shrink: 0;
-    padding: 0.2rem 0.4rem;
-    border-radius: 0.5rem;
+    padding: var(--spacing-xs) 0.4rem;
+    border-radius: var(--radius-sm);
 }
 
 .time-scale {
     display: flex;
     flex-direction: column;
     gap: 0.55rem;
-    padding: 0.75em;
-    margin: 0.35em 0;
-    border: 1px solid black;
-    border-radius: 0.8em;
+    padding: var(--spacing-lg);
+    margin: var(--spacing-md) 0;
+    border: var(--border-standard);
+    border-radius: var(--radius-lg);
     box-sizing: border-box;
+    background: var(--background3);
 }
 
 .time-scale-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 1rem;
+    gap: var(--spacing-xl);
 }
 
 .time-scale-progress-section {
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
+    gap: var(--spacing-md);
 }
 
 .time-scale-progress-block {
     display: flex;
     flex-direction: column;
-    gap: 0.2rem;
+    gap: var(--spacing-xs);
 }
 
 .time-scale-progress-meta {
     display: flex;
     justify-content: space-between;
-    font-size: 0.875rem;
+    font-size: var(--font-sm);
     font-weight: 600;
 }
 
@@ -150,7 +213,7 @@ h3 {
     table-layout: fixed; /* ADDED: Ensures strict width enforcement */
     border-collapse: collapse;
     border-spacing: 0;
-    font-size: 1rem;
+    font-size: var(--font-base);
     line-height: 0.7;
 }
 
@@ -173,13 +236,13 @@ h3 {
 #agenda-table .agenda-time-label {
     padding: 0 0.15rem;
     white-space: nowrap;
-    font-size: 0.55rem;
+    font-size: var(--font-xs);
     line-height: 0.7;
     text-align: center;
 }
 
 #agenda-table .agenda-time-label-full-hour {
-    font-size: 1rem;
+    font-size: var(--font-base);
     font-weight: 700;
     color: #000;
 }
@@ -196,14 +259,14 @@ h3 {
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--overlay-bg);
     display: flex;
     justify-content: center;
     align-items: center;
     z-index: 100;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.2s ease;
+    transition: opacity var(--transition-fast);
 }
 
 .modal-overlay.active {
@@ -216,11 +279,11 @@ h3 {
     width: 100%;
     max-width: 600px;
     max-height: 90vh;
-    border-radius: 1em;
+    border-radius: var(--radius-xl);
     display: flex;
     flex-direction: column;
     transform: translateY(20px);
-    transition: transform 0.2s ease;
+    transition: transform var(--transition-fast);
 }
 
 .modal-overlay.active .modal-content {
@@ -228,30 +291,30 @@ h3 {
 }
 
 .modal-header {
-    padding: 1.5rem;
-    border-bottom: 1px solid #e5e7eb;
+    padding: var(--spacing-2xl);
+    border-bottom: 1px solid var(--border-lighter);
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
 
 .modal-body {
-    padding: 1.5rem;
+    padding: var(--spacing-2xl);
     overflow-y: auto;
 }
 
 .modal-footer {
-    padding: 1.5rem;
-    border-top: 1px solid #e5e7eb;
+    padding: var(--spacing-2xl);
+    border-top: 1px solid var(--border-lighter);
     display: flex;
     justify-content: flex-end;
-    gap: 1rem;
+    gap: var(--spacing-xl);
 }
 
 .close-btn {
     background: none;
     border: none;
-    font-size: 1.5rem;
+    font-size: var(--font-lg);
     cursor: pointer;
 }
 
@@ -259,13 +322,14 @@ h3 {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 0.5rem 1rem;
-    font-size: 0.875rem;
+    padding: var(--spacing-md) var(--spacing-xl);
+    font-size: var(--font-sm);
     font-weight: 500;
-    border-radius: 1em;
+    border-radius: var(--radius-xl);
     border: none;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all var(--transition-fast);
+    background: transparent;
 }
 
 .btn-primary {
@@ -274,17 +338,17 @@ h3 {
 }
 
 .btn-primary:hover {
-    background-color: #3b82f6;
+    background-color: var(--primary);
     text-decoration: none;
 }
 
 .btn-secondary {
-    background-color: #e5e7eb;
-    color: #374151;
+    background-color: var(--border-lighter);
+    color: var(--text-primary);
 }
 
 .btn-secondary:hover {
-    background-color: #d1d5db;
+    background-color: var(--border-light);
 }
 
 .btn-danger {
@@ -300,7 +364,7 @@ h3 {
 .form-group {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: var(--spacing-md);
 }
 
 .form-group.full-width {
@@ -308,9 +372,9 @@ h3 {
 }
 
 label {
-    font-size: 0.875rem;
+    font-size: var(--font-sm);
     font-weight: 500;
-    color: #374151;
+    color: var(--text-primary);
 }
 
 input[type="text"],
@@ -321,12 +385,12 @@ input[type="datetime-local"],
 select,
 textarea {
     width: 100%;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid #d1d5db;
+    padding: var(--spacing-md) var(--spacing-lg);
+    border: 1px solid var(--border-light);
     border-radius: var(--radius-md);
     font-family: inherit;
-    font-size: 0.875rem;
-    transition: border-color 0.2s ease;
+    font-size: var(--font-sm);
+    transition: border-color var(--transition-fast);
 }
 
 input:focus,
@@ -334,7 +398,7 @@ select:focus,
 textarea:focus {
     outline: none;
     border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 textarea {
@@ -344,16 +408,16 @@ textarea {
 
 .progress-bar {
     width: 100%;
-    height: 1rem;
-    background-color: #e5e7eb;
-    border-radius: 0.5rem;
+    height: var(--spacing-xl);
+    background-color: var(--border-lighter);
+    border-radius: var(--radius-sm);
     overflow: hidden;
 }
 
 .progress-bar-fill {
     height: 100%;
-    background-color: #3b82f6;
-    transition: width 0.2s ease;
+    background-color: var(--primary);
+    transition: width var(--transition-fast);
 }
 
 .edit-icon {
@@ -364,10 +428,10 @@ textarea {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.5rem 1rem;
-    border: 1px solid black;
-    border-radius: 0.5rem;
-    margin-bottom: 0.5rem;
+    padding: var(--spacing-md) var(--spacing-xl);
+    border: var(--border-standard);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--spacing-md);
 }
 
 .agenda-item .agenda-item-content {

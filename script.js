@@ -128,24 +128,36 @@ function toggleTask(id, UITarget){
 }
 
 function editTask(id) {
-    let task = state.tasks.find((task)=>task.id === id)
+    let task = state.tasks.find((task) => task.id === id);
     document.getElementById("modal-title").innerText = "Edit Task";
+    
     document.getElementById("modal-body").innerHTML = `
-        <div class="form-group ">
+        <div class="form-group">
             <label>Name <span style="color:red">*</span></label>
             <input type="text" id="modal-taskName" value="${task.name}">
         </div>
         ${
-            state.timeScales.map((scale)=>{
+            state.timeScales.map((scale) => {
+                // Convert stored seconds into Hours, Minutes, and Seconds for the UI
+                const totalSecs = task.times[scale.id].goal || 0;
+                const h = Math.floor(totalSecs / 3600);
+                const m = Math.floor((totalSecs % 3600) / 60);
+                const s = totalSecs % 60;
+
                 return `
                     <div class="form-group">
-                        <label>${scale.name} goal (in seconds) <span style="color:red">*</span></label>
-                        <input type="number" id="modal-task-${scale.id}-goal" value="${task.times[scale.id].goal}">
+                        <label>${scale.name} goal <span style="color:red">*</span></label>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <input type="number" id="modal-task-${scale.id}-h" value="${h}" min="0" placeholder="HH" style="width: 70px;"> hrs
+                            <input type="number" id="modal-task-${scale.id}-m" value="${m}" min="0" max="59" placeholder="MM" style="width: 70px;"> mins
+                            <input type="number" id="modal-task-${scale.id}-s" value="${s}" min="0" max="59" placeholder="SS" style="width: 70px;"> secs
+                        </div>
                     </div>
-                `
+                `;
             }).join("")
         }
     `;
+    
     document.getElementById("btn-submit").innerText = "Save Changes";
     document.getElementById("btn-submit").onclick = function() {
         const newName = document.getElementById("modal-taskName").value;
@@ -154,24 +166,41 @@ function editTask(id) {
             alert("Invalid input. Please try again.");
             return;
         }
+        
         task.name = newName;
-        task.times = state.timeScales.reduce((acc, scale) => {
-            const newGoal = parseInt(document.getElementById(`modal-task-${scale.id}-goal`).value);
-            if (isNaN(newGoal)) {
-                alert("Invalid input. Please try again.");
-                throw new Error("Invalid input");
-            }
-            acc[scale.id] = {
-                ...task.times[scale.id],
-                goal: newGoal
-            };
-            return acc;
-        }, {});
+        
+        try {
+            task.times = state.timeScales.reduce((acc, scale) => {
+                // Read the separate inputs, defaulting to 0 if the user leaves them blank
+                const h = parseInt(document.getElementById(`modal-task-${scale.id}-h`).value) || 0;
+                const m = parseInt(document.getElementById(`modal-task-${scale.id}-m`).value) || 0;
+                const s = parseInt(document.getElementById(`modal-task-${scale.id}-s`).value) || 0;
+
+                // Validate that we don't have negative numbers
+                if (h < 0 || m < 0 || s < 0) {
+                    throw new Error("Time values cannot be negative.");
+                }
+
+                // Convert back to total seconds for the database/state
+                const newGoal = (h * 3600) + (m * 60) + s;
+
+                acc[scale.id] = {
+                    ...task.times[scale.id],
+                    goal: newGoal
+                };
+                return acc;
+            }, {});
+        } catch (error) {
+            alert("Invalid time input. Please check your values and try again.");
+            return; // Stop the save process if validation failed
+        }
+
         Save();
         RenderTasks();
         RenderTimeScales();
         closeModal("modal");
     }
+    
     openModal("modal");
 }
 
@@ -183,9 +212,8 @@ function RenderTasks() {
             <div class="task" style="text-align: center; cursor: pointer;" onclick="createNewTask()">+ New Task</div>
             ${
                 state.tasks.map((task)=>{
-                    const backgroundColor = task.running ? 'lightgreen' : '';
                     return `
-                        <div class="task" style="background-color: ${backgroundColor}; cursor: pointer;" onclick="if (event.target.classList.contains('edit-icon')) { return; } toggleTask('${task.id}', this)">
+                        <div class="task ${task.running ? "active" : ""}" style="cursor: pointer;" onclick="if (event.target.classList.contains('edit-icon')) { return; } toggleTask('${task.id}', this)">
                             <div class="task-main-content">
                                 <div class="task-title-row">
                                     <h3 class="task-title">${task.name}</h3>
