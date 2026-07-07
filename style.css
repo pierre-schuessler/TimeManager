@@ -1,0 +1,268 @@
+body {
+    margin: 0px;
+}
+
+header {
+    height: 5vh;
+}
+
+main {
+    height: 90vh;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+}
+
+main > div {
+    border: 1px solid black;
+    padding: 1em;
+}
+
+footer {
+    height: 90vh;
+}
+
+
+.task {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 1em 1.25em;
+    margin: 0.5em 0;
+    border: 1px solid black;
+    border-radius: 1em;
+}
+
+.task:not(:first-child){
+    margin-top: 1em;
+}
+
+.task-main-content {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.task-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+}
+
+.task-title {
+    flex: 1;
+}
+
+.task-progress-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.75rem;
+}
+
+.task-progress-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.6rem 0.75rem;
+    border-radius: 0.75rem;
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.task-progress-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.task-progress-bar {
+    height: 0.6rem;
+}
+
+.task-actions {
+    flex-shrink: 0;
+    padding: 0.2rem 0.4rem;
+    border-radius: 0.5rem;
+}
+
+.time-scale {
+    display: flex;
+    justify-content: space-between;
+    padding: 1em;
+    margin: 0.5em;
+    border: 1px solid black;
+    border-radius: 1em;
+}
+
+h3
+{
+    margin-block-start: 0em;
+    margin-block-end: 0em;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.modal-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modal-content {
+  background: white;
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  border-radius: 1em;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(20px);
+  transition: transform 0.2s ease;
+}
+
+.modal-overlay.active .modal-content {
+  transform: translateY(0);
+}
+
+.modal-header {
+  padding: 1.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-body {
+  padding: 1.5rem;
+  overflow-y: auto;
+}
+
+.modal-footer {
+  padding: 1.5rem;
+  border-top: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 1em;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-primary {
+  background-color: blue;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #3b82f6;
+  text-decoration: none;
+}
+
+.btn-secondary {
+  background-color: #e5e7eb;
+  color: #374151;
+}
+
+.btn-secondary:hover {
+  background-color: #d1d5db;
+}
+
+.btn-danger {
+  background-color: red;
+  color: white;
+}
+
+.btn-success {
+  background-color: green;
+  color: white;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group.full-width {
+  grid-column: span 2;
+}
+
+label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+}
+
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="password"],
+input[type="datetime-local"],
+select,
+textarea {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: 0.875rem;
+  transition: border-color 0.2s ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+textarea {
+  resize: both;
+  min-height: 80px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 1rem;
+  background-color: #e5e7eb;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background-color: #3b82f6;
+  transition: width 0.2s ease;
+}

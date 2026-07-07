@@ -1,0 +1,35 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Time Manager</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header></header>
+    <main>
+        <div id="root-tasks"></div>
+        <div id="root-time-scales"></div>
+        <div id="root-graphics"></div>
+    </main>
+    <footer></footer>
+
+    <div id="modal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modal-title"></h2>
+        <button class="close-btn" onclick="closeModal('modal')">×</button>
+      </div>
+      <div class="modal-body" id="modal-body">
+        
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal')">Cancel</button>
+        <button class="btn btn-primary" id="btn-submit"></button>
+      </div>
+    </div>
+  </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
