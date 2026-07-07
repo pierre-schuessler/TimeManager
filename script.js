@@ -1,12 +1,12 @@
 let state = {
     tasks: [],
-    timeScales: []
+    timeScales: [],
+    agenda: [] 
 }
 
 function Load() {
     let savedTimeScales = localStorage.getItem("timeScales")
-    
-    // Create a date object strictly set to today's local midnight
+
     let todayMidnight = new Date();
     todayMidnight.setHours(0, 0, 0, 0);
 
@@ -15,18 +15,28 @@ function Load() {
             id: "daily",
             name: "Daily",
             duration: 1,
-            start: todayMidnight.toISOString() // Now correctly saves exactly 00:00:00
+            start: todayMidnight.toISOString()
         },
     ]
 
     let savedTasks = localStorage.getItem("tasks")
     state.tasks = savedTasks ? JSON.parse(savedTasks) : []
+
+    let savedAgenda = localStorage.getItem("agenda")
+    let parsedAgenda = savedAgenda ? JSON.parse(savedAgenda) : []
+    
+    
+    
+    state.agenda = parsedAgenda.map(item => {
+        if (typeof item === 'number') return new Date(item).toISOString();
+        if (typeof item === 'string' && item.includes('-') && !item.includes('T')) return null; 
+        return item;
+    }).filter(Boolean);
 }
 
 function Save() {
     localStorage.setItem("timeScales", JSON.stringify(state.timeScales))
 
-    // save with all tasks being not running without affecting the state
     let tasksToSave = state.tasks.map((task)=>{
         return {
             ...task,
@@ -34,6 +44,7 @@ function Save() {
         }
     })
     localStorage.setItem("tasks", JSON.stringify(tasksToSave))
+    localStorage.setItem("agenda", JSON.stringify(state.agenda))
 }
 
 function createNewTask(){
@@ -55,7 +66,7 @@ function createNewTask(){
     )
     Save()
     RenderTasks()
-    RenderGraphics()
+    RenderTimeScales()
 }
 
 let interval;
@@ -64,33 +75,29 @@ let startCounters;
 
 function toggleTask(id, UITarget){
     let task = state.tasks.find((task)=>task.id === id)
-    // check if running
     clearInterval(interval);
     if (task.running) {
         task.running = false
         RenderTasks()
     } else {
-        // stop all other tasks
         state.tasks.forEach((task)=>{
             task.running = false
         })
         task.running = true
         startTime = new Date().getTime()
-        // copy the current elapsed times to startCounters by value, not by reference
         startCounters = JSON.parse(JSON.stringify(task.times))
 
         RenderTasks()
-        RenderGraphics()
+        RenderTimeScales()
+
         interval = setInterval(()=>{
-            // Calculate elapsed time once per tick
             let elapsedTime = (new Date().getTime() - startTime) / 1000
-            
+
             state.timeScales.forEach((scale)=>{
-                // Safe to use startCounters here now, as it's always in sync
                 task.times[scale.id].elapsed = Math.round(startCounters[scale.id].elapsed + elapsedTime)
-                task.times[scale.id].elapsed = Math.min(task.times[scale.id].elapsed, task.times[scale.id].goal) // cap at goal
+                task.times[scale.id].elapsed = Math.min(task.times[scale.id].elapsed, task.times[scale.id].goal)
             });
-            
+
             let allCompleted = state.timeScales.every((scale)=>{
                 return task.times[scale.id].elapsed >= task.times[scale.id].goal
             })
@@ -99,16 +106,13 @@ function toggleTask(id, UITarget){
                 clearInterval(interval);
             }
 
-            // check if any time scale is completed (start + amount of days)
             state.timeScales.forEach((scale)=>{
                 if (new Date(scale.start).getTime() + scale.duration * 24 * 60 * 60 * 1000 < new Date().getTime()) {
                     scale.start = new Date().toISOString()
-                    // reset all of the elapsed times for this scale
                     state.tasks.forEach((task)=>{
                         task.times[scale.id].elapsed = 0
                     })
-                    
-                    // If we reset a scale while running, we must also update the snapshot!
+
                     if (task.running) {
                         startTime = new Date().getTime();
                         startCounters = JSON.parse(JSON.stringify(task.times));
@@ -116,9 +120,8 @@ function toggleTask(id, UITarget){
                 }
             })
 
-            // update the UI
             RenderTasks()
-            RenderGraphics()
+            RenderTimeScales()
             Save()
         }, 1000)
     }
@@ -132,7 +135,6 @@ function editTask(id) {
             <label>Name <span style="color:red">*</span></label>
             <input type="text" id="modal-taskName" value="${task.name}">
         </div>
-
         ${
             state.timeScales.map((scale)=>{
                 return `
@@ -147,7 +149,7 @@ function editTask(id) {
     document.getElementById("btn-submit").innerText = "Save Changes";
     document.getElementById("btn-submit").onclick = function() {
         const newName = document.getElementById("modal-taskName").value;
-        
+
         if (!newName) {
             alert("Invalid input. Please try again.");
             return;
@@ -167,11 +169,8 @@ function editTask(id) {
         }, {});
         Save();
         RenderTasks();
-        RenderGraphics();
+        RenderTimeScales();
         closeModal("modal");
-        
-        
-        
     }
     openModal("modal");
 }
@@ -184,9 +183,7 @@ function RenderTasks() {
             <div class="task" style="text-align: center; cursor: pointer;" onclick="createNewTask()">+ New Task</div>
             ${
                 state.tasks.map((task)=>{
-                    // Check the state to determine the color
-                    const backgroundColor = task.running ? 'lightgreen' : ''; 
-                    
+                    const backgroundColor = task.running ? 'lightgreen' : '';
                     return `
                         <div class="task" style="background-color: ${backgroundColor}; cursor: pointer;" onclick="if (event.target.classList.contains('edit-icon')) { return; } toggleTask('${task.id}', this)">
                             <div class="task-main-content">
@@ -199,7 +196,6 @@ function RenderTasks() {
                                         const progress = task.times[scale.id].goal > 0
                                             ? Math.min(100, (task.times[scale.id].elapsed / task.times[scale.id].goal) * 100)
                                             : 0;
-
                                         return `
                                             <div class="task-progress-row">
                                                 <div class="task-progress-meta">
@@ -236,23 +232,19 @@ function addTimeScale() {
             start: dateTemp.toDateString()
         };
         state.timeScales.push(newScale);
-        
+
         let runningTask = null;
 
-        // Update existing tasks with the new time scale
         state.tasks.forEach((task) => {
             task.times[newScale.id] = {
                 elapsed: 0,
-                goal: 3600 // Default goal for new time scales
+                goal: 3600
             };
-            
-            // Keep track if this task is currently the running one
             if (task.running) {
                 runningTask = task;
             }
         });
 
-        // Recreate the snapshot and reset the timer if a task is actively running
         if (runningTask) {
             startTime = new Date().getTime();
             startCounters = JSON.parse(JSON.stringify(runningTask.times));
@@ -261,7 +253,8 @@ function addTimeScale() {
         Save();
         RenderTimeScales();
         RenderTasks();
-        RenderGraphics();
+        RenderAgenda();
+
     } else {
         alert("Invalid input. Please try again.");
     }
@@ -275,7 +268,6 @@ function editTimeScale(id) {
             <label>Name <span style="color:red">*</span></label>
             <input type="text" id="modal-timeScaleName" value="${scale.name}">
         </div>
-
         <div class="form-group ">
             <label>Duration (in days) <span style="color:red">*</span></label>
             <input type="number" id="modal-timeScaleDuration" value="${scale.duration}">
@@ -290,7 +282,6 @@ function editTimeScale(id) {
             scale.duration = newDuration;
             Save();
             RenderTimeScales();
-            RenderGraphics();
             closeModal("modal");
         } else {
             alert("Invalid input. Please try again.");
@@ -299,85 +290,284 @@ function editTimeScale(id) {
     openModal("modal");
 }
 
-function RenderTimeScales() {
+function RenderTimeScales(agendaData = state.agenda) {
     const container = document.getElementById("root-time-scales");
     container.innerHTML = `
         <h3>Time Scales</h3>
         <div id="time-scale-list-container">
             <div class="time-scale" style="text-align: center; cursor: pointer;" onclick="addTimeScale()">+ New Time Scale</div>
             ${state.timeScales.map((scale)=>{
-                return `
-                    <div class="time-scale">
-                        <h3>${scale.name}</h3>
-                        <div>Duration: ${scale.duration} day${scale.duration !== 1 ? "s" : ""}</div>
-                        <div>
-                            <div>Start: ${new Date(scale.start).toLocaleDateString('en-GB', { timeZone: 'UTC' })}</div>
-                            <div>End: ${new Date(new Date(scale.start).getTime() + scale.duration * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB', { timeZone: 'UTC' })}</div>
-                        </div>
-                        <div onclick="editTimeScale('${scale.id}')" class="edit-icon">⚙</div>
-                    </div>
-                    
-                `
-            }).join("")}
-            
-        </div>
-    `
-}
-
-function RenderGraphics() {
-    const container = document.getElementById("root-graphics");
-    
-    container.innerHTML = `
-        <h3>Graphics</h3>
-        <div id="graphics-container">
-            ${state.timeScales.map((scale) => {
-                
-                // 1. Calculate Task Progress
                 const totals = state.tasks.reduce((acc, task) => {
                     acc.elapsed += Number(task.times[scale.id]?.elapsed) || 0;
                     acc.goal += Number(task.times[scale.id]?.goal) || 0;
                     return acc;
                 }, { elapsed: 0, goal: 0 });
 
-                const percentage = totals.goal > 0 
-                    ? Math.min(100, (totals.elapsed / totals.goal) * 100) 
-                    : 0;
+                const taskPercentage = totals.goal > 0
+                    ? Math.min(100, (totals.elapsed / totals.goal) * 100)
+                    : 100;
 
-                // 2. Calculate Time Progress
-                const current_time = Date.now();
-                
-                // NEW: Safely parse the ISO Date string into milliseconds
-                // If it fails for any reason, default to current time
-                const startTimeMs = new Date(scale.start).getTime() || current_time;
+                const currentTime = Date.now();
+                const startTimeMs = new Date(scale.start).getTime() || currentTime;
                 const durationDays = Number(scale.duration) || 0;
 
-                // Calculate time used directly in milliseconds
-                const time_used = current_time - startTimeMs; 
-                const total_time_ms = durationDays * 24 * 60 * 60 * 1000; 
+                const rawTotalTimeMs = durationDays * 24 * 60 * 60 * 1000;
+                const slotDurationMs = 15 * 60 * 1000; 
+
+                let totalExcludedTimeMs = 0;
+                let passedExcludedTimeMs = 0;
+
                 
-                const percentage_time = (total_time_ms > 0 && !isNaN(time_used))
-                    ? Math.max(0, Math.min(100, (time_used / total_time_ms) * 100)) 
+                agendaData.forEach(blockStartIso => {
+                    const blockStartMs = new Date(blockStartIso).getTime();
+                    const blockEndMs = blockStartMs + slotDurationMs;
+                    const scaleEndMs = startTimeMs + rawTotalTimeMs;
+
+                    if (blockStartMs >= startTimeMs && blockStartMs < scaleEndMs) {
+                        totalExcludedTimeMs += slotDurationMs;
+
+                        if (currentTime >= blockEndMs) {
+                            passedExcludedTimeMs += slotDurationMs;
+                        } else if (currentTime > blockStartMs && currentTime < blockEndMs) {
+                            passedExcludedTimeMs += (currentTime - blockStartMs);
+                        }
+                    }
+                });
+
+                const totalTimeMs = rawTotalTimeMs - totalExcludedTimeMs;
+                const rawTimeUsed = currentTime - startTimeMs;
+                const timeUsed = rawTimeUsed - passedExcludedTimeMs;
+
+                const timePercentage = (totalTimeMs > 0 && !isNaN(timeUsed))
+                    ? Math.max(0, Math.min(100, (timeUsed / totalTimeMs) * 100))
                     : 0;
 
-                // 3. Render Output
                 return `
-                    <div class="graphic" style="margin-bottom: 24px;">
-                        <h4>${scale.name || "Unknown Scale"}</h4>
-                        
-                        <div class="progress-bar">
-                            <div class="progress-bar-fill" style="width: ${percentage}%;"></div>
+                    <div class="time-scale">
+                        <div class="time-scale-header">
+                            <h3>${scale.name}</h3>
+                            <div onclick="editTimeScale('${scale.id}')" class="edit-icon">⚙</div>
                         </div>
-                        <div>Tasks: ${totals.elapsed} / ${totals.goal} seconds</div>
-                        
-                        <div class="progress-bar" style="margin-top: 8px;">
-                            <div class="progress-bar-fill" style="width: ${percentage_time}%;"></div>
+                        <div>Duration: ${scale.duration} day${scale.duration !== 1 ? "s" : ""}</div>
+                        <div>
+                            <div>Start: ${new Date(scale.start).toLocaleDateString('en-GB', { timeZone: 'UTC' })}</div>
+                            <div>End: ${new Date(new Date(scale.start).getTime() + scale.duration * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB', { timeZone: 'UTC' })}</div>
                         </div>
-                        <div>Time Elapsed: ${percentage_time.toFixed(2)}%</div>
+                        <div class="time-scale-progress-section">
+                            <div class="time-scale-progress-block">
+                                <div class="time-scale-progress-meta">
+                                    <span>Tasks</span>
+                                    <span>${totals.elapsed} / ${totals.goal} sec</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-bar-fill" style="width: ${taskPercentage}%;"></div>
+                                </div>
+                            </div>
+                            <div class="time-scale-progress-block">
+                                <div class="time-scale-progress-meta">
+                                    <span>Time</span>
+                                    <span>${timePercentage.toFixed(1)}%</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-bar-fill" style="width: ${timePercentage}%;"></div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                `;
+                `
             }).join("")}
         </div>
+    `
+}
+
+function resetTimes(){
+    let dateTemp = new Date();
+    dateTemp.setUTCHours(0, 0, 0, 0);
+    state.timeScales.forEach((scale)=>{
+        scale.start = dateTemp.toISOString()
+    })
+
+    let runningTask = null;
+
+    state.tasks.forEach((task)=>{
+        Object.keys(task.times).forEach((scaleId)=>{
+            task.times[scaleId].elapsed = 0
+        })
+
+        if (task.running) {
+            runningTask = task;
+        }
+    })
+
+    if (runningTask) {
+        startTime = new Date().getTime();
+        startCounters = JSON.parse(JSON.stringify(runningTask.times));
+    } else {
+        startCounters = null;
+    }
+
+    Save()
+    RenderTasks()
+    RenderTimeScales()
+}
+
+function RenderAgenda() { // Function to be rewriten
+    const container = document.getElementById("root-agenda");
+    
+    
+    const baseDate = new Date();
+    baseDate.setHours(0, 0, 0, 0);
+    
+    const getTimestamp = (dayOffset, timeOffset) => {
+        return baseDate.getTime() + (dayOffset * 24 * 60 * 60 * 1000) + (timeOffset * 15 * 60 * 1000);
+    };
+
+    container.innerHTML = `
+        <h3>Agenda</h3>
+        <table id="agenda-table" style="user-select: none;">
+            ${(() => {
+                const longestScale = state.timeScales.reduce((max, scale) => Math.max(max, scale.duration), 0);
+                const rows = [];
+                const headerCells = [`<th class="agenda-top-left-empty"></th>`];
+
+                for (let j = 0; j < longestScale; j++) {
+                    const currentDate = new Date(baseDate.getTime() + j * 24 * 60 * 60 * 1000);
+                    const dateString = currentDate.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' });
+                    headerCells.push(`<th class="agenda-date-header" style="font-weight: bold;">${dateString}</th>`);
+                }
+                rows.push(`<tr>${headerCells.join('')}</tr>`);
+
+                for (let i = 0; i < 24 * 4; i++) {
+                    const isFullHour = i % 4 === 0;
+                    const timeLabel = new Date(0, 0, 0, Math.floor(i / 4), (i % 4) * 15)
+                        .toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+                    const labelContent = isFullHour ? timeLabel : '';
+                    const rowCells = [`<td class="agenda-time-label${isFullHour ? ' agenda-time-label-full-hour' : ''}" style="font-weight: 700; text-align: center;">${labelContent}</td>`];
+
+                    for (let j = 0; j < longestScale; j++) {
+                        const ts = getTimestamp(j, i);
+                        const isoString = new Date(ts).toISOString();
+                        const isSelected = state.agenda.includes(isoString);
+                        const bgColor = isSelected ? 'lightcoral' : 'transparent';
+                        
+                        rowCells.push(`<td class="agenda-cell" data-day="${j}" data-time="${i}" data-iso="${isoString}" style="background-color: ${bgColor}; border: 1px solid black; border-top: ${isFullHour ? '3' : '1'}px solid black; min-width: 40px;"></td>`);
+                    }
+                    rows.push(`<tr>${rowCells.join('')}</tr>`);
+                }
+                return rows.join('');
+            })()}
+        </table>
     `;
+
+    const table = document.getElementById("agenda-table");
+    let isDragging = false;
+    let isSelecting = true;
+    let startCoords = null;
+    let currentCoords = null;
+
+    const parseCoords = (cell) => {
+        return {
+            day: parseInt(cell.getAttribute("data-day")),
+            time: parseInt(cell.getAttribute("data-time")),
+            iso: cell.getAttribute("data-iso")
+        };
+    };
+
+    const updatePreview = () => {
+        if (!startCoords || !currentCoords) return;
+
+        const minDay = Math.min(startCoords.day, currentCoords.day);
+        const maxDay = Math.max(startCoords.day, currentCoords.day);
+        const minTime = Math.min(startCoords.time, currentCoords.time);
+        const maxTime = Math.max(startCoords.time, currentCoords.time);
+
+        document.querySelectorAll('.agenda-cell').forEach(cell => {
+            const coords = parseCoords(cell);
+            const isInState = state.agenda.includes(coords.iso);
+
+            const inBox = (coords.day >= minDay && coords.day <= maxDay &&
+                           coords.time >= minTime && coords.time <= maxTime);
+
+            if (inBox) {
+                cell.style.backgroundColor = isSelecting ? "lightcoral" : "transparent";
+            } else {
+                cell.style.backgroundColor = isInState ? "lightcoral" : "transparent";
+            }
+        });
+    };
+
+    table.addEventListener("mousedown", (e) => {
+        if (e.target.tagName === "TD" && e.target.classList.contains("agenda-cell")) {
+            isDragging = true;
+            startCoords = parseCoords(e.target);
+            currentCoords = startCoords;
+            isSelecting = !state.agenda.includes(startCoords.iso);
+
+            updatePreview();
+            RenderTimeScales();
+        }
+    });
+
+    table.addEventListener("mouseover", (e) => {
+        if (isDragging && e.target.tagName === "TD" && e.target.classList.contains("agenda-cell")) {
+            currentCoords = parseCoords(e.target);
+            updatePreview();
+
+            const minDay = Math.min(startCoords.day, currentCoords.day);
+            const maxDay = Math.max(startCoords.day, currentCoords.day);
+            const minTime = Math.min(startCoords.time, currentCoords.time);
+            const maxTime = Math.max(startCoords.time, currentCoords.time);
+
+            let tempAgenda = [...state.agenda];
+
+            for (let d = minDay; d <= maxDay; d++) {
+                for (let t = minTime; t <= maxTime; t++) {
+                    const isoString = new Date(getTimestamp(d, t)).toISOString();
+                    if (isSelecting && !tempAgenda.includes(isoString)) {
+                        tempAgenda.push(isoString);
+                    } else if (!isSelecting && tempAgenda.includes(isoString)) {
+                        tempAgenda = tempAgenda.filter(item => item !== isoString);
+                    }
+                }
+            }
+            RenderTimeScales(tempAgenda);
+        }
+    });
+
+    if (window.agendaMouseUpHandler) {
+        document.removeEventListener("mouseup", window.agendaMouseUpHandler);
+    }
+
+    window.agendaMouseUpHandler = () => {
+        if (isDragging && startCoords && currentCoords) {
+            isDragging = false;
+
+            const minDay = Math.min(startCoords.day, currentCoords.day);
+            const maxDay = Math.max(startCoords.day, currentCoords.day);
+            const minTime = Math.min(startCoords.time, currentCoords.time);
+            const maxTime = Math.max(startCoords.time, currentCoords.time);
+
+            for (let d = minDay; d <= maxDay; d++) {
+                for (let t = minTime; t <= maxTime; t++) {
+                    const isoString = new Date(getTimestamp(d, t)).toISOString();
+                    if (isSelecting) {
+                        if (!state.agenda.includes(isoString)) state.agenda.push(isoString);
+                    } else {
+                        const index = state.agenda.indexOf(isoString);
+                        if (index > -1) state.agenda.splice(index, 1);
+                    }
+                }
+            }
+
+            startCoords = null;
+            currentCoords = null;
+            Save();
+            RenderTimeScales(); 
+        }
+    };
+
+    document.addEventListener("mouseup", window.agendaMouseUpHandler);
 }
 
 openModal = (id) => document.getElementById(id).classList.add('active');
@@ -386,4 +576,4 @@ closeModal = (id) => document.getElementById(id).classList.remove('active');
 Load()
 RenderTasks()
 RenderTimeScales()
-RenderGraphics()
+RenderAgenda()

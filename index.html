@@ -6,18 +6,21 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <header></header>
+    <header>
+      <div></div>
+      <button class="btn" id="btn-reset" onclick="resetTimes()">Reset</button>
+    </header>
     <main>
         <div id="root-tasks"></div>
         <div id="root-time-scales"></div>
-        <div id="root-graphics"></div>
+        <div id="root-agenda"></div>
     </main>
     <footer></footer>
 
     <div id="modal" class="modal-overlay">
     <div class="modal-content">
       <div class="modal-header">
-        <h2 id="modal-title"></h2>
+        <h3 id="modal-title"></h3>
         <button class="close-btn" onclick="closeModal('modal')">×</button>
       </div>
       <div class="modal-body" id="modal-body">
