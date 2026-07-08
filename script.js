@@ -763,8 +763,18 @@ function openHelp(){
             <p style="margin-top: 0; font-size: 0.95em;">
                 Make sure your volume is up so the app can guide you. You'll hear a single chime when you cross a specific time goal, a double chime when an entire task is completely finished, and three chimes when a full Time Scale wraps up.<br>If your schedule gets tight and you need to start working within the next 5 minutes to meet your goals, a ringing alarm will inform you.
             </p>
+
+            <h4 style="margin-bottom: 5px;">Resetting</h4>
+            <p style="margin-top: 0; font-size: 0.95em;">
+                You can reset all timers and start all timescales over again by clicking the "Reset" button on the top right.
+            </p>
         </div>
     `;
+
+    document.getElementById("btn-submit").innerText = "Let's go!";
+    document.getElementById("btn-submit").onclick = function() {
+        closeModal("modal");
+    }
     openModal("modal");
 }
 

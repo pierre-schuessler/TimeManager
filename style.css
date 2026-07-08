@@ -52,6 +52,11 @@ header {
     display: flex;
     justify-content: space-between;
     background-color: var(--background2);
+    align-items: center;
+}
+
+header > *{
+    margin: 0em var(--spacing-lg);
 }
 
 main {
