@@ -12,7 +12,7 @@ function Load() {
 
     state.timeScales = savedTimeScales ? JSON.parse(savedTimeScales) : [
         {
-            id: "daily",
+            id: crypto.randomUUID(),
             name: "Daily",
             duration: 1,
             start: todayMidnight.toISOString()
@@ -202,7 +202,6 @@ function toggleTask(id, UITarget){
             })
 
             RenderTasks()
-            RenderTimeScales()
             Save()
         }, 1000)
     }
@@ -305,6 +304,7 @@ function RenderTasks() {
                                             <div class="task-progress-row">
                                                 <div class="task-progress-meta">
                                                     <span>${scale.name}</span>
+                                                    <span>${progress.toFixed(1)}%</span>
                                                     <span>${new Date(task.times[scale.id].elapsed * 1000).toISOString().substring(11, 19)} / ${new Date(task.times[scale.id].goal * 1000).toISOString().substring(11, 19)}</span>
                                                 </div>
                                                 <div class="progress-bar task-progress-bar">
@@ -329,7 +329,7 @@ function addTimeScale() {
 
     if (name && !isNaN(duration)) {
         let dateTemp = new Date();
-        dateTemp.setUTCHours(0, 0, 0, 0);
+        dateTemp.setHours(0, 0, 0, 0);
         const newScale = {
             id: crypto.randomUUID(),
             name: name,
@@ -377,22 +377,49 @@ function editTimeScale(id) {
             <label>Duration (in days) <span style="color:red">*</span></label>
             <input type="number" id="modal-timeScaleDuration" value="${scale.duration}">
         </div>
+        <div class="form-group ">
+            <label>Start Date <span style="color:red">*</span></label>
+            <input type="date" id="modal-timeScaleStart" value="${new Date(scale.start).toISOString().split('T')[0]}">
+        </div>
     `;
     document.getElementById("btn-submit").innerText = "Save Changes";
     document.getElementById("btn-submit").onclick = function() {
         const newName = document.getElementById("modal-timeScaleName").value;
         const newDuration = parseInt(document.getElementById("modal-timeScaleDuration").value);
-        if (newName && !isNaN(newDuration)) {
+        const newStart = document.getElementById("modal-timeScaleStart").value;
+        if (newName && !isNaN(newDuration) && newStart) {
             scale.name = newName;
             scale.duration = newDuration;
+            scale.start = newStart;
             Save();
             RenderTimeScales();
+            RenderAgenda()
             closeModal("modal");
         } else {
             alert("Invalid input. Please try again.");
         }
     }
     openModal("modal");
+}
+
+function formatDuration(ms) {
+    if (ms <= 0) return "00:00:00";
+    
+    const totalSeconds = Math.floor(ms / 1000);
+    
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    
+    const formattedTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    
+    if (days > 0) {
+        
+        return `${days.toString().padStart(2, "0")}:${formattedTime}`;
+    }
+    
+    return formattedTime;
 }
 
 function RenderTimeScales(agendaData = state.agenda) {
@@ -445,7 +472,7 @@ function RenderTimeScales(agendaData = state.agenda) {
                 const timeRemaining = totalTimeMs - timeUsed;
                 const taskRemaining = totals.goal - totals.elapsed;
 
-                if (taskRemaining > 0 && (timeRemaining - taskRemaining) <= 5 * 60 * 1000) { // ring if the user should start working within the next 5 minutes
+                if (taskRemaining > 0 && (timeRemaining - taskRemaining) <= 5 * 60 * 1000) { 
                     if (!scale.hasRung) { 
                         ring();
                         document.getElementById("modal-title").innerText = "Time Alert";
@@ -475,13 +502,14 @@ function RenderTimeScales(agendaData = state.agenda) {
                         </div>
                         <div>Duration: ${scale.duration} day${scale.duration !== 1 ? "s" : ""}</div>
                         <div>
-                            <div>Start: ${new Date(scale.start).toLocaleDateString('en-GB', { timeZone: 'UTC' })}</div>
-                            <div>End: ${new Date(new Date(scale.start).getTime() + scale.duration * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB', { timeZone: 'UTC' })}</div>
+                            <div>Start: ${new Date(scale.start).toLocaleDateString('en-GB')}</div>
+                            <div>End: ${new Date(new Date(scale.start).getTime() + scale.duration * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB')}</div>
                         </div>
                         <div class="time-scale-progress-section">
                             <div class="time-scale-progress-block">
                                 <div class="time-scale-progress-meta">
                                     <span>Tasks</span>
+                                    <span>${taskPercentage.toFixed(1)}%</span>
                                     <span>${new Date(totals.elapsed * 1000).toISOString().substring(11, 19)} / ${new Date(totals.goal * 1000).toISOString().substring(11, 19)}</span>
                                 </div>
                                 <div class="progress-bar">
@@ -492,6 +520,7 @@ function RenderTimeScales(agendaData = state.agenda) {
                                 <div class="time-scale-progress-meta">
                                     <span>Time</span>
                                     <span>${timePercentage.toFixed(1)}%</span>
+                                    <span>${formatDuration(timeUsed)} / ${formatDuration(totalTimeMs)}</span>
                                 </div>
                                 <div class="progress-bar">
                                     <div class="progress-bar-fill" style="width: ${timePercentage}%;"></div>
@@ -505,9 +534,11 @@ function RenderTimeScales(agendaData = state.agenda) {
     `
 }
 
+let timeScalesRenderInterval = setInterval(()=>{RenderTimeScales()}, 1000)
+
 function resetTimes(){
     let dateTemp = new Date();
-    dateTemp.setUTCHours(0, 0, 0, 0);
+    dateTemp.setHours(0, 0, 0, 0);
     state.timeScales.forEach((scale)=>{
         scale.start = dateTemp.toISOString()
     })
@@ -534,13 +565,24 @@ function resetTimes(){
     Save()
     RenderTasks()
     RenderTimeScales()
+    RenderAgenda()
 }
 
 function RenderAgenda() { 
     const container = document.getElementById("root-agenda");
+    console.log(state.timeScales)
     
-    const baseDate = new Date();
+    
+    const earliestStart = state.timeScales.reduce((min, scale) => {
+        const scaleStart = new Date(scale.start).getTime();
+        console.log(scaleStart)
+        return scaleStart < min ? scaleStart : min;
+    }, Infinity);
+
+    console.log(earliestStart)
+    const baseDate = new Date(earliestStart);
     baseDate.setHours(0, 0, 0, 0);
+    console.log(baseDate)
     
     const getTimestamp = (dayOffset, timeOffset) => {
         return baseDate.getTime() + (dayOffset * 24 * 60 * 60 * 1000) + (timeOffset * 15 * 60 * 1000);
@@ -693,6 +735,39 @@ function RenderAgenda() {
 
     document.addEventListener("mouseup", window.agendaMouseUpHandler);
 }
+
+function openHelp(){
+    document.getElementById("modal-title").innerText = "How to use the tracker";
+    document.getElementById("modal-body").innerHTML = `
+        <div style="line-height: 1.6; max-height: 60vh; overflow-y: auto; padding-right: 10px;">
+            <p>This app is designed to help you balance your goals by tracking your tasks against the actual time you have available.</p>
+            
+            <hr style="margin: 15px 0; border: 0; border-top: 1px solid #ccc;" />
+
+            <h4 style="margin-bottom: 5px;">Setting Your Timeframes</h4>
+            <p style="margin-top: 0; font-size: 0.95em;">
+                Start by setting up throught which time frames (daily, weekly, etc.) you want to set goals for. You can always tweak the duration and start date later by clicking the gear icon. As you work, the app will automatically measure your progress against these broader periods.
+            </p>
+
+            <h4 style="margin-bottom: 5px;">Working on Tasks</h4>
+            <p style="margin-top: 0; font-size: 0.95em;">
+                Once your scales are set, create some tasks. Clicking the gear icon on any task lets you assign specific time goals for it across each of your active time scales.<br>When you're ready to focus, simply click a task to start its timer. To pause it, just click it again or select a different task to switch what you are working on.
+            </p>
+
+            <h4 style="margin-bottom: 5px;">Managing Your Schedule</h4>
+            <p style="margin-top: 0; font-size: 0.95em;">
+                The Agenda is your daily schedule broken into 15-minute chunks. By clicking and dragging across the grid, you can block out times when you are asleep or busy. The app subtracts these red blocks from your active Time Scales, giving you a better picture of your actual workable hours.
+            </p>
+
+            <h4 style="margin-bottom: 5px;">Audio information</h4>
+            <p style="margin-top: 0; font-size: 0.95em;">
+                Make sure your volume is up so the app can guide you. You'll hear a single chime when you cross a specific time goal, a double chime when an entire task is completely finished, and three chimes when a full Time Scale wraps up.<br>If your schedule gets tight and you need to start working within the next 5 minutes to meet your goals, a ringing alarm will inform you.
+            </p>
+        </div>
+    `;
+    openModal("modal");
+}
+
 
 openModal = (id) => document.getElementById(id).classList.add('active');
 closeModal = (id) => document.getElementById(id).classList.remove('active');
