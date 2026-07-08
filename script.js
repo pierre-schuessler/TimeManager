@@ -236,7 +236,9 @@ function editTask(id) {
             }).join("")
         }
     `;
-    
+
+    document.getElementById('btn-submit').insertAdjacentHTML('beforebegin', `<button class="btn btn-danger" id="delete-button" onclick="deleteTask('${task.id}')">Delete</button>`);
+        
     document.getElementById("btn-submit").innerText = "Save Changes";
     document.getElementById("btn-submit").onclick = function() {
         const newName = document.getElementById("modal-taskName").value;
@@ -278,6 +280,20 @@ function editTask(id) {
     }
     
     openModal("modal");
+}
+
+function deleteTask(id) {
+    const index = state.tasks.findIndex(task => task.id === id);
+    
+    if (index !== -1 && window.confirm(`Are you sure you want to delete "${state.tasks[index].name}"`)) {
+        state.tasks.splice(index, 1);
+    }
+    Save();
+    RenderTimeScales();
+    RenderTasks();
+    RenderAgenda();
+    
+    closeModal("modal")
 }
 
 function RenderTasks() {
@@ -376,6 +392,8 @@ function editTimeScale(id) {
             <input type="date" id="modal-timeScaleStart" value="${new Date(scale.start).toISOString().split('T')[0]}">
         </div>
     `;
+    document.getElementById('btn-submit').insertAdjacentHTML('beforebegin', `<button class="btn btn-danger" id="delete-button" onclick="deleteTimeScale('${scale.id}')">Delete</button>`);
+
     document.getElementById("btn-submit").innerText = "Save Changes";
     document.getElementById("btn-submit").onclick = function() {
         const newName = document.getElementById("modal-timeScaleName").value;
@@ -393,7 +411,29 @@ function editTimeScale(id) {
             alert("Invalid input. Please try again.");
         }
     }
+
     openModal("modal");
+}
+
+function deleteTimeScale(id) {
+    const index = state.timeScales.findIndex(scale => scale.id === id);
+    
+    if (index !== -1 && window.confirm(`Are you sure you want to delete "${state.timeScales[index].name}"`)) {
+        state.timeScales.splice(index, 1);
+        
+        state.tasks.forEach(task => {
+            if (task.times && task.times[id]) {
+                delete task.times[id];
+            }
+        });
+    }
+    
+    Save();
+    RenderTimeScales();
+    RenderTasks();
+    RenderAgenda();
+    
+    closeModal("modal");
 }
 
 function formatDuration(ms) {
@@ -774,7 +814,10 @@ function openHelp(){
 
 
 openModal = (id) => document.getElementById(id).classList.add('active');
-closeModal = (id) => document.getElementById(id).classList.remove('active');
+closeModal = (id) => {
+    document.getElementById("delete-button")?.remove()
+    document.getElementById(id).classList.remove('active')
+};
 
 Load()
 RenderTasks()
