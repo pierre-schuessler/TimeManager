@@ -324,16 +324,13 @@ function RenderTasks() {
 }
 
 function addTimeScale() {
-    const name = prompt("Enter the name of the new time scale:");
-    const duration = parseInt(prompt("Enter the duration of the new time scale in days:"));
-
-    if (name && !isNaN(duration)) {
+    
         let dateTemp = new Date();
         dateTemp.setHours(0, 0, 0, 0);
         const newScale = {
             id: crypto.randomUUID(),
-            name: name,
-            duration: duration,
+            name: "New time scale",
+            duration: 1,
             start: dateTemp.toDateString()
         };
         state.timeScales.push(newScale);
@@ -360,9 +357,6 @@ function addTimeScale() {
         RenderTasks();
         RenderAgenda();
 
-    } else {
-        alert("Invalid input. Please try again.");
-    }
 }
 
 function editTimeScale(id) {
@@ -568,7 +562,7 @@ function resetTimes(){
     RenderAgenda()
 }
 
-function RenderAgenda() { 
+function RenderAgenda() { // to rewrite
     const container = document.getElementById("root-agenda");
     console.log(state.timeScales)
     
