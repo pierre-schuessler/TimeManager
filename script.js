@@ -436,7 +436,7 @@ function editTimeScale(id) {
         </div>
         <div class="form-group ">
             <label>Start Date <span style="color:red">*</span></label>
-            <input type="date" id="modal-timeScaleStart" value="${new Date(scale.start).toISOString().split('T')[0]}">
+            <input type="date" id="modal-timeScaleStart" value="${new Date(new Date(scale.start) - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0]}">
         </div>
     `;
     document.getElementById('btn-submit').insertAdjacentHTML('beforebegin', `<button class="btn btn-danger" id="delete-button" onclick="deleteTimeScale('${scale.id}')">Delete</button>`);
