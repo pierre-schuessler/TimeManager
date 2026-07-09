@@ -186,21 +186,6 @@ function toggleTask(id, UITarget){
                 ding(3);
             }
 
-            
-            state.timeScales.forEach((scale)=>{
-                if (new Date(scale.start).getTime() + scale.duration * 24 * 60 * 60 * 1000 < new Date().getTime()) {
-                    scale.start = new Date().toISOString()
-                    state.tasks.forEach((task)=>{
-                        task.times[scale.id].elapsed = 0
-                    })
-
-                    if (task.running) {
-                        startTime = new Date().getTime();
-                        startCounters = JSON.parse(JSON.stringify(task.times));
-                    }
-                }
-            })
-
             RenderTasks()
             Save()
         }, 1000)
@@ -391,7 +376,7 @@ function editTimeScale(id) {
             <label>Start Date <span style="color:red">*</span></label>
             <input type="date" id="modal-timeScaleStart" value="${new Date(scale.start).toISOString().split('T')[0]}">
         </div>
-    `;
+    `;+
     document.getElementById('btn-submit').insertAdjacentHTML('beforebegin', `<button class="btn btn-danger" id="delete-button" onclick="deleteTimeScale('${scale.id}')">Delete</button>`);
 
     document.getElementById("btn-submit").innerText = "Save Changes";
@@ -568,7 +553,10 @@ function RenderTimeScales(agendaData = state.agenda) {
     `
 }
 
-let timeScalesRenderInterval = setInterval(()=>{RenderTimeScales()}, 1000)
+let timeScalesRenderInterval = setInterval(()=>{
+    checkTimeScaleDone()
+    RenderTimeScales()
+}, 1000);
 
 function resetTimes(){
     let dateTemp = new Date();
@@ -768,6 +756,45 @@ function RenderAgenda() { // to rewrite
     };
 
     document.addEventListener("mouseup", window.agendaMouseUpHandler);
+}
+
+function checkTimeScaleDone() {
+    let SomethingChanged = false;
+
+    state.timeScales.forEach((scale) => {
+        const scaleDurationMs = scale.duration * 24 * 60 * 60 * 1000;
+        
+        if (new Date(scale.start).getTime() + scaleDurationMs < new Date().getTime()) {
+            let newDate = new Date()
+            newDate.setHours(0,0,0,0)
+            scale.start = newDate.toISOString();
+            SomethingChanged = true;
+            
+            let runningTask = null;
+
+            state.tasks.forEach((task) => {
+                if (task.times && task.times[scale.id]) {
+                    task.times[scale.id].elapsed = 0;
+                }
+                
+                if (task.running) {
+                    runningTask = task;
+                }
+            });
+
+            if (runningTask) {
+                startTime = new Date().getTime();
+                startCounters = JSON.parse(JSON.stringify(runningTask.times));
+            }
+        }
+    });
+
+    if (SomethingChanged) {
+        Save();
+        RenderTasks();
+        RenderTimeScales()
+        RenderAgenda()
+    }
 }
 
 function openHelp(){
