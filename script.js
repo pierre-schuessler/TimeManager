@@ -136,6 +136,19 @@ function toggleTask(id, UITarget){
         interval = setInterval(()=>{
             let elapsedTime = (new Date().getTime() - startTime) / 1000
 
+            let currentSlotIso = getCurrentAgendaSlot();
+            let agendaBlock = state.agenda.find(item => item.iso === currentSlotIso);
+
+            if (!agendaBlock) {
+                agendaBlock = { iso: currentSlotIso, busy: false, tasksWorked: {} };
+                state.agenda.push(agendaBlock);
+            }
+
+            if (!agendaBlock.tasksWorked) {
+                agendaBlock.tasksWorked = {};
+            }
+
+            agendaBlock.tasksWorked[task.id] = (agendaBlock.tasksWorked[task.id] || 0) + 1;
             
             const wasAllCompleted = state.timeScales.every(scale =>
                 task.times[scale.id].elapsed >= task.times[scale.id].goal
@@ -601,24 +614,44 @@ function resetTimes(){
     RenderAgenda()
 }
 
+function getCurrentAgendaSlot() {
+    let now = new Date();
+    
+    let minutes = Math.floor(now.getMinutes() / 15) * 15;
+    let slot = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), minutes, 0, 0);
+    return slot.toISOString();
+}
+
 function RenderAgenda() { 
     const container = document.getElementById("root-agenda");
-    console.log(state.timeScales)
-    
     
     const earliestStart = state.timeScales.reduce((min, scale) => {
         const scaleStart = new Date(scale.start).getTime();
-        console.log(scaleStart)
         return scaleStart < min ? scaleStart : min;
     }, Infinity);
 
-    console.log(earliestStart)
     const baseDate = new Date(earliestStart);
     baseDate.setHours(0, 0, 0, 0);
-    console.log(baseDate)
     
     const getTimestamp = (dayOffset, timeOffset) => {
         return baseDate.getTime() + (dayOffset * 24 * 60 * 60 * 1000) + (timeOffset * 15 * 60 * 1000);
+    };
+
+    
+    const getCellBgStyles = (isBusy, totalSecondsWorked) => {
+        const hasWork = totalSecondsWorked > 0;
+        const percent = hasWork ? Math.min(1, totalSecondsWorked / 900) : 0;
+        const greenColor = `rgba(76, 255, 80, ${Math.max(0.2, percent)})`;
+
+        if (isBusy && hasWork) {
+            return { background: `linear-gradient(135deg, lightcoral 50%, ${greenColor} 50%)`, backgroundColor: '' };
+        } else if (isBusy) {
+            return { background: '', backgroundColor: 'lightcoral' };
+        } else if (hasWork) {
+            return { background: '', backgroundColor: greenColor };
+        } else {
+            return { background: '', backgroundColor: 'transparent' };
+        }
     };
 
     container.innerHTML = `
@@ -627,14 +660,14 @@ function RenderAgenda() {
             ${(() => {
                 const longestScale = state.timeScales.reduce((max, scale) => Math.max(max, scale.duration), 0);
                 const rows = [];
-                const headerCells = [`<th class="agenda-top-left-empty"></th>`];
+                const headerCells = ['<th class="agenda-top-left-empty"></th>'];
 
                 for (let j = 0; j < longestScale; j++) {
                     const currentDate = new Date(baseDate.getTime() + j * 24 * 60 * 60 * 1000);
                     const dateString = currentDate.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' });
                     headerCells.push(`<th class="agenda-date-header" style="font-weight: bold;">${dateString}</th>`);
                 }
-                rows.push(`<tr>${headerCells.join('')}</tr>`);
+                rows.push(`<tr>${headerCells.join("")}</tr>`);
 
                 for (let i = 0; i < 24 * 4; i++) {
                     const isFullHour = i % 4 === 0;
@@ -642,18 +675,30 @@ function RenderAgenda() {
                         .toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
                     const labelContent = isFullHour ? timeLabel : '';
-                    const rowCells = [`<td class="agenda-time-label${isFullHour ? ' agenda-time-label-full-hour' : ''}" style="font-weight: 700; text-align: center;">${labelContent}</td>`];
+                    const rowCells = [`<td class="agenda-time-label${isFullHour ? " agenda-time-label-full-hour" : ""}" style="font-weight: 700; text-align: center;">${labelContent}</td>`];
 
                     for (let j = 0; j < longestScale; j++) {
                         const ts = getTimestamp(j, i);
                         const isoString = new Date(ts).toISOString();
                         
-                        const isSelected = state.agenda.some(item => item.iso === isoString);
-                        const bgColor = isSelected ? 'lightcoral' : 'transparent';
+                        const agendaItem = state.agenda.find(item => item.iso === isoString);
+                        let totalSecondsWorked = 0;
+                        let isBusy = false;
                         
-                        rowCells.push(`<td class="agenda-cell" data-day="${j}" data-time="${i}" data-iso="${isoString}" style="background-color: ${bgColor}; border: 1px solid black; border-top: ${isFullHour ? '3' : '1'}px solid black; min-width: 40px;"></td>`);
+                        if (agendaItem) {
+                            isBusy = agendaItem.busy;
+                            if (agendaItem.tasksWorked) {
+                                totalSecondsWorked = Object.values(agendaItem.tasksWorked).reduce((sum, val) => sum + val, 0);
+                            }
+                        }
+                        
+                        
+                        const bg = getCellBgStyles(isBusy, totalSecondsWorked);
+                        const inlineStyleStr = bg.background ? `background: ${bg.background};` : `background-color: ${bg.backgroundColor};`;
+                        
+                        rowCells.push(`<td class="agenda-cell" data-day="${j}" data-time="${i}" data-iso="${isoString}" style="${inlineStyleStr} border: 1px solid black; border-top: ${isFullHour ? "3" : "1"}px solid black; min-width: 40px;"></td>`);
                     }
-                    rows.push(`<tr>${rowCells.join('')}</tr>`);
+                    rows.push(`<tr>${rowCells.join("")}</tr>`);
                 }
                 return rows.join('');
             })()}
@@ -684,17 +729,22 @@ function RenderAgenda() {
 
         document.querySelectorAll('.agenda-cell').forEach(cell => {
             const coords = parseCoords(cell);
-
-            const isInState = state.agenda.some(item => item.iso === coords.iso);
-
-            const inBox = (coords.day >= minDay && coords.day <= maxDay &&
-                           coords.time >= minTime && coords.time <= maxTime);
-
-            if (inBox) {
-                cell.style.backgroundColor = isSelecting ? "lightcoral" : "transparent";
-            } else {
-                cell.style.backgroundColor = isInState ? "lightcoral" : "transparent";
+            const agendaItem = state.agenda.find(item => item.iso === coords.iso);
+            
+            let totalSecondsWorked = 0;
+            if (agendaItem && agendaItem.tasksWorked) {
+                totalSecondsWorked = Object.values(agendaItem.tasksWorked).reduce((sum, val) => sum + val, 0);
             }
+            
+            const inBox = (coords.day >= minDay && coords.day <= maxDay &&coords.time >= minTime && coords.time <= maxTime);
+
+            const isOriginallyBusy = agendaItem ? agendaItem.busy : false;
+            const showBusy = inBox ? isSelecting : isOriginallyBusy;
+
+    
+            const bg = getCellBgStyles(showBusy, totalSecondsWorked);
+            cell.style.background = bg.background;
+            cell.style.backgroundColor = bg.backgroundColor;
         });
     };
 
@@ -704,7 +754,7 @@ function RenderAgenda() {
             startCoords = parseCoords(e.target);
             currentCoords = startCoords;
             
-            isSelecting = !state.agenda.some(item => item.iso === startCoords.iso);
+            isSelecting = !state.agenda.some(item => item.iso === startCoords.iso && item.busy);
 
             updatePreview();
             RenderTimeScales();
@@ -721,17 +771,23 @@ function RenderAgenda() {
             const minTime = Math.min(startCoords.time, currentCoords.time);
             const maxTime = Math.max(startCoords.time, currentCoords.time);
 
-            let tempAgenda = [...state.agenda];
+            let tempAgenda = JSON.parse(JSON.stringify(state.agenda));
 
             for (let d = minDay; d <= maxDay; d++) {
                 for (let t = minTime; t <= maxTime; t++) {
                     const isoString = new Date(getTimestamp(d, t)).toISOString();
+                    const existingItem = tempAgenda.find(item => item.iso === isoString);
                     
-                    const exists = tempAgenda.some(item => item.iso === isoString);
-                    if (isSelecting && !exists) {
-                        tempAgenda.push({ iso: isoString, busy: true});
-                    } else if (!isSelecting && exists) {
-                        tempAgenda = tempAgenda.filter(item => item.iso !== isoString);
+                    if (isSelecting) {
+                        if (existingItem) {
+                            existingItem.busy = true;
+                        } else {
+                            tempAgenda.push({ iso: isoString, busy: true, tasksWorked: {} });
+                        }
+                    } else {
+                        if (existingItem) {
+                            existingItem.busy = false;
+                        }
                     }
                 }
             }
@@ -755,14 +811,17 @@ function RenderAgenda() {
             for (let d = minDay; d <= maxDay; d++) {
                 for (let t = minTime; t <= maxTime; t++) {
                     const isoString = new Date(getTimestamp(d, t)).toISOString();
-                    
-                    const exists = state.agenda.some(item => item.iso === isoString);
+                    const existingItem = state.agenda.find(item => item.iso === isoString);
                     
                     if (isSelecting) {
-                        if (!exists) state.agenda.push({ iso: isoString, busy: true});
+                        if (existingItem) {
+                            existingItem.busy = true;
+                        } else {
+                            state.agenda.push({ iso: isoString, busy: true, tasksWorked: {} });
+                        }
                     } else {
-                        if (exists) {
-                            state.agenda = state.agenda.filter(item => item.iso !== isoString);
+                        if (existingItem) {
+                            existingItem.busy = false;
                         }
                     }
                 }
@@ -772,6 +831,7 @@ function RenderAgenda() {
             currentCoords = null;
             Save();
             RenderTimeScales(); 
+            RenderAgenda(); 
         }
     };
 
