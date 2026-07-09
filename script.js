@@ -26,9 +26,17 @@ function Load() {
     let parsedAgenda = savedAgenda ? JSON.parse(savedAgenda) : []
     
     state.agenda = parsedAgenda.map(item => {
-        if (typeof item === 'number') return new Date(item).toISOString();
-        if (typeof item === 'string' && item.includes('-') && !item.includes('T')) return null; 
-        return item;
+        if (typeof item === 'number') {
+            return { iso: new Date(item).toISOString(), busy: true };
+        }
+        if (typeof item === 'string') {
+            if (item.includes('-') && !item.includes('T')) return null; 
+            return { iso: item, busy:true };
+        }
+        if (typeof item === 'object' && item !== null && item.iso) {
+            return item;
+        }
+        return null;
     }).filter(Boolean);
 }
 
@@ -376,7 +384,7 @@ function editTimeScale(id) {
             <label>Start Date <span style="color:red">*</span></label>
             <input type="date" id="modal-timeScaleStart" value="${new Date(scale.start).toISOString().split('T')[0]}">
         </div>
-    `;+
+    `;
     document.getElementById('btn-submit').insertAdjacentHTML('beforebegin', `<button class="btn btn-danger" id="delete-button" onclick="deleteTimeScale('${scale.id}')">Delete</button>`);
 
     document.getElementById("btn-submit").innerText = "Save Changes";
@@ -468,7 +476,10 @@ function RenderTimeScales(agendaData = state.agenda) {
                 let totalExcludedTimeMs = 0;
                 let passedExcludedTimeMs = 0;
 
-                agendaData.forEach(blockStartIso => {
+                agendaData.forEach(block => {
+                    const blockStartIso = block.iso;
+                    if (!blockStartIso || !block.busy) return;
+
                     const blockStartMs = new Date(blockStartIso).getTime();
                     const blockEndMs = blockStartMs + slotDurationMs;
                     const scaleEndMs = startTimeMs + rawTotalTimeMs;
@@ -590,7 +601,7 @@ function resetTimes(){
     RenderAgenda()
 }
 
-function RenderAgenda() { // to rewrite
+function RenderAgenda() { 
     const container = document.getElementById("root-agenda");
     console.log(state.timeScales)
     
@@ -636,7 +647,8 @@ function RenderAgenda() { // to rewrite
                     for (let j = 0; j < longestScale; j++) {
                         const ts = getTimestamp(j, i);
                         const isoString = new Date(ts).toISOString();
-                        const isSelected = state.agenda.includes(isoString);
+                        
+                        const isSelected = state.agenda.some(item => item.iso === isoString);
                         const bgColor = isSelected ? 'lightcoral' : 'transparent';
                         
                         rowCells.push(`<td class="agenda-cell" data-day="${j}" data-time="${i}" data-iso="${isoString}" style="background-color: ${bgColor}; border: 1px solid black; border-top: ${isFullHour ? '3' : '1'}px solid black; min-width: 40px;"></td>`);
@@ -672,7 +684,8 @@ function RenderAgenda() { // to rewrite
 
         document.querySelectorAll('.agenda-cell').forEach(cell => {
             const coords = parseCoords(cell);
-            const isInState = state.agenda.includes(coords.iso);
+
+            const isInState = state.agenda.some(item => item.iso === coords.iso);
 
             const inBox = (coords.day >= minDay && coords.day <= maxDay &&
                            coords.time >= minTime && coords.time <= maxTime);
@@ -690,7 +703,8 @@ function RenderAgenda() { // to rewrite
             isDragging = true;
             startCoords = parseCoords(e.target);
             currentCoords = startCoords;
-            isSelecting = !state.agenda.includes(startCoords.iso);
+            
+            isSelecting = !state.agenda.some(item => item.iso === startCoords.iso);
 
             updatePreview();
             RenderTimeScales();
@@ -712,10 +726,12 @@ function RenderAgenda() { // to rewrite
             for (let d = minDay; d <= maxDay; d++) {
                 for (let t = minTime; t <= maxTime; t++) {
                     const isoString = new Date(getTimestamp(d, t)).toISOString();
-                    if (isSelecting && !tempAgenda.includes(isoString)) {
-                        tempAgenda.push(isoString);
-                    } else if (!isSelecting && tempAgenda.includes(isoString)) {
-                        tempAgenda = tempAgenda.filter(item => item !== isoString);
+                    
+                    const exists = tempAgenda.some(item => item.iso === isoString);
+                    if (isSelecting && !exists) {
+                        tempAgenda.push({ iso: isoString, busy: true});
+                    } else if (!isSelecting && exists) {
+                        tempAgenda = tempAgenda.filter(item => item.iso !== isoString);
                     }
                 }
             }
@@ -739,11 +755,15 @@ function RenderAgenda() { // to rewrite
             for (let d = minDay; d <= maxDay; d++) {
                 for (let t = minTime; t <= maxTime; t++) {
                     const isoString = new Date(getTimestamp(d, t)).toISOString();
+                    
+                    const exists = state.agenda.some(item => item.iso === isoString);
+                    
                     if (isSelecting) {
-                        if (!state.agenda.includes(isoString)) state.agenda.push(isoString);
+                        if (!exists) state.agenda.push({ iso: isoString, busy: true});
                     } else {
-                        const index = state.agenda.indexOf(isoString);
-                        if (index > -1) state.agenda.splice(index, 1);
+                        if (exists) {
+                            state.agenda = state.agenda.filter(item => item.iso !== isoString);
+                        }
                     }
                 }
             }
