@@ -50,6 +50,11 @@ function Save() {
         }
     })
     localStorage.setItem("tasks", JSON.stringify(tasksToSave))
+
+    // remove uselless agenda items
+    state.agenda = state.agenda.filter((item)=>{
+        return (item.busy | item.tasksWorked)
+    })
     localStorage.setItem("agenda", JSON.stringify(state.agenda))
 }
 
