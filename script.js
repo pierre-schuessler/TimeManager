@@ -208,7 +208,6 @@ function toggleTask(id, UITarget){
             }
 
             RenderTasks()
-            RenderAgenda()
             Save()
         }, 1000)
     }
