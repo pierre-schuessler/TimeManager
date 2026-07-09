@@ -111,45 +111,90 @@ function createNewTask(){
     RenderTasks()
     RenderTimeScales()
 }
+function getCurrentAgendaSlot() {
+    let now = new Date();
+    let minutes = Math.floor(now.getMinutes() / 15) * 15;
+    let slot = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), minutes, 0, 0);
+    return slot.toISOString();
+}
 
 let interval;
 let startTime;
 let startCounters;
+let lastTime;
+let deltaTime = 0;
 
-function toggleTask(id, UITarget){
-    let task = state.tasks.find((task)=>task.id === id)
+function toggleTask(id, UITarget) {
+    let task = state.tasks.find((task) => task.id === id);
     clearInterval(interval);
+    
     if (task.running) {
-        task.running = false
-        RenderTasks()
+        task.running = false;
+        RenderTasks();
     } else {
-        state.tasks.forEach((task)=>{
-            task.running = false
-        })
-        task.running = true
-        startTime = new Date().getTime()
-        startCounters = JSON.parse(JSON.stringify(task.times))
+        state.tasks.forEach((task) => {
+            task.running = false;
+        });
+        task.running = true;
+        startTime = new Date().getTime();
+        startCounters = JSON.parse(JSON.stringify(task.times));
+        lastTime = new Date().getTime();
 
-        RenderTasks()
-        RenderTimeScales()
+        RenderTasks();
+        RenderTimeScales();
 
-        interval = setInterval(()=>{
-            let elapsedTime = (new Date().getTime() - startTime) / 1000
-
-            let currentSlotIso = getCurrentAgendaSlot();
-            let agendaBlock = state.agenda.find(item => item.iso === currentSlotIso);
-
-            if (!agendaBlock) {
-                agendaBlock = { iso: currentSlotIso, busy: false, tasksWorked: {} };
-                state.agenda.push(agendaBlock);
-            }
-
-            if (!agendaBlock.tasksWorked) {
-                agendaBlock.tasksWorked = {};
-            }
-
-            agendaBlock.tasksWorked[task.id] = (agendaBlock.tasksWorked[task.id] || 0) + 1;
+        interval = setInterval(() => {
+            let now = new Date().getTime();
+            let elapsedTime = (now - startTime) / 1000;
             
+            deltaTime = now - lastTime;
+            lastTime = now;
+            
+            
+            let timeRemaining = deltaTime; //  ms
+            let timeMarker = now;
+
+            while (timeRemaining > 0) {
+                let markerDate = new Date(timeMarker);
+                
+               
+                let minutes = Math.floor(markerDate.getMinutes() / 15) * 15;
+                let slotStart = new Date(markerDate.getFullYear(), markerDate.getMonth(), markerDate.getDate(), markerDate.getHours(), minutes, 0, 0);
+                let slotStartTime = slotStart.getTime();
+                
+                let timeInThisSlot;
+
+                
+                if (timeMarker === slotStartTime) {
+                    timeMarker -= 1;
+                    continue; 
+                } else {
+                    
+                    timeInThisSlot = Math.min(timeRemaining, timeMarker - slotStartTime);
+                }
+                
+                let currentSlotIso = slotStart.toISOString();
+                let agendaBlock = state.agenda.find(item => item.iso === currentSlotIso);
+
+                if (!agendaBlock) {
+                    agendaBlock = { iso: currentSlotIso, busy: false, tasksWorked: {} };
+                    state.agenda.push(agendaBlock);
+                }
+
+                if (!agendaBlock.tasksWorked) {
+                    agendaBlock.tasksWorked = {};
+                }
+
+                
+                let timeInThisSlotSeconds = timeInThisSlot / 1000; //s
+                agendaBlock.tasksWorked[task.id] = (agendaBlock.tasksWorked[task.id] || 0) + timeInThisSlotSeconds;
+
+                
+                timeMarker -= timeInThisSlot;
+                timeRemaining -= timeInThisSlot;
+            }
+
+
             const wasAllCompleted = state.timeScales.every(scale =>
                 task.times[scale.id].elapsed >= task.times[scale.id].goal
             );
@@ -162,10 +207,8 @@ function toggleTask(id, UITarget){
                     return acc;
                 }, { elapsed: 0, goal: 0 });
                 prevScaleCompletion[scale.id] = totals.goal > 0 && totals.elapsed >= totals.goal;
-                
             });
 
-            
             let anyCrossed = false;
             state.timeScales.forEach(scale => {
                 const newElapsed = Math.round(startCounters[scale.id].elapsed + elapsedTime);
@@ -177,7 +220,6 @@ function toggleTask(id, UITarget){
                 task.times[scale.id].elapsed = newElapsed;
             });
 
-            
             const isAllCompleted = state.timeScales.every(scale =>
                 task.times[scale.id].elapsed >= task.times[scale.id].goal
             );
@@ -196,7 +238,6 @@ function toggleTask(id, UITarget){
                 }
             });
 
-            
             if (anyCrossed) {
                 ding(1);
             }
@@ -207,9 +248,9 @@ function toggleTask(id, UITarget){
                 ding(3);
             }
 
-            RenderTasks()
-            Save()
-        }, 1000)
+            RenderTasks();
+            Save();
+        }, 1000);
     }
 }
 
@@ -614,13 +655,7 @@ function resetTimes(){
     RenderAgenda()
 }
 
-function getCurrentAgendaSlot() {
-    let now = new Date();
-    
-    let minutes = Math.floor(now.getMinutes() / 15) * 15;
-    let slot = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), minutes, 0, 0);
-    return slot.toISOString();
-}
+
 
 function RenderAgenda() { 
     const container = document.getElementById("root-agenda");
@@ -644,7 +679,7 @@ function RenderAgenda() {
         const greenColor = `rgba(76, 255, 80, ${Math.max(0.2, percent)})`;
 
         if (isBusy && hasWork) {
-            return { background: `linear-gradient(135deg, lightcoral 50%, ${greenColor} 50%)`, backgroundColor: '' };
+            return { background: `linear-gradient(135deg, lightcoral 30%, ${greenColor} 70%)`, backgroundColor: '' };
         } else if (isBusy) {
             return { background: '', backgroundColor: 'lightcoral' };
         } else if (hasWork) {
