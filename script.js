@@ -677,25 +677,35 @@ function RenderAgenda() {
     const baseDate = new Date(earliestStart);
     baseDate.setHours(0, 0, 0, 0);
     
+    
+    const todayStr = new Date().toDateString();
+    
     const getTimestamp = (dayOffset, timeOffset) => {
         return baseDate.getTime() + (dayOffset * 24 * 60 * 60 * 1000) + (timeOffset * 15 * 60 * 1000);
     };
 
-    
-    const getCellBgStyles = (isBusy, totalSecondsWorked) => {
+    const getCellBgStyles = (isBusy, totalSecondsWorked, isToday) => {
         const hasWork = totalSecondsWorked > 0;
         const percent = hasWork ? Math.min(1, totalSecondsWorked / 900) : 0;
         const greenColor = `rgba(76, 255, 80, ${Math.max(0.2, percent)})`;
+        let styles = {};
 
         if (isBusy && hasWork) {
-            return { background: `linear-gradient(135deg, lightcoral 30%, ${greenColor} 70%)`, backgroundColor: '' };
+            styles = { background: `linear-gradient(135deg, lightcoral 30%, ${greenColor} 70%)`, backgroundColor: '' };
         } else if (isBusy) {
-            return { background: '', backgroundColor: 'lightcoral' };
+            styles = { background: '', backgroundColor: 'lightcoral' };
         } else if (hasWork) {
-            return { background: '', backgroundColor: greenColor };
+            styles = { background: '', backgroundColor: greenColor };
         } else {
-            return { background: '', backgroundColor: 'transparent' };
+            styles = { background: '', backgroundColor: 'transparent' };
         }
+        
+        if (isToday) {
+            styles.borderLeft = '4px solid lightcoral';
+            styles.borderRight = '4px solid lightcoral';
+        }
+
+        return styles;
     };
 
     container.innerHTML = `
@@ -736,11 +746,15 @@ function RenderAgenda() {
                             }
                         }
                         
+                        const isToday = new Date(ts).toDateString() === todayStr;
+                        const bg = getCellBgStyles(isBusy, totalSecondsWorked, isToday);
                         
-                        const bg = getCellBgStyles(isBusy, totalSecondsWorked);
-                        const inlineStyleStr = bg.background ? `background: ${bg.background};` : `background-color: ${bg.backgroundColor};`;
+                        let inlineStyleStr = bg.background ? `background: ${bg.background};` : `background-color: ${bg.backgroundColor};`;
+                        if (bg.borderLeft) {
+                            inlineStyleStr += ` border-left: ${bg.borderLeft}; border-right: ${bg.borderRight};`;
+                        }
                         
-                        rowCells.push(`<td class="agenda-cell" data-day="${j}" data-time="${i}" data-iso="${isoString}" style="${inlineStyleStr} border: 1px solid black; border-top: ${isFullHour ? "3" : "1"}px solid black; min-width: 40px;"></td>`);
+                        rowCells.push(`<td class="agenda-cell" data-day="${j}" data-time="${i}" data-iso="${isoString}" style="border: 1px solid black; border-top: ${isFullHour ? "3" : "1"}px solid black; min-width: 40px; ${inlineStyleStr}"></td>`);
                     }
                     rows.push(`<tr>${rowCells.join("")}</tr>`);
                 }
@@ -785,8 +799,8 @@ function RenderAgenda() {
             const isOriginallyBusy = agendaItem ? agendaItem.busy : false;
             const showBusy = inBox ? isSelecting : isOriginallyBusy;
 
-    
-            const bg = getCellBgStyles(showBusy, totalSecondsWorked);
+            const isToday = new Date(coords.iso).toDateString() === todayStr;
+            const bg = getCellBgStyles(showBusy, totalSecondsWorked, isToday);
             cell.style.background = bg.background;
             cell.style.backgroundColor = bg.backgroundColor;
         });
