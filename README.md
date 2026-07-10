@@ -1,1 +1,18 @@
-# TimeManager
+# Time Manager
+### Video Demo:  TODO
+### Description:
+This website is designed to help the user balance their goals by tracking their tasks against the actual time they have available.
+
+It is built from three core components:
+
+1. The To-do List shows the different tasks that the user has configured. They may create a new task by pressing a button or edit an existing one, whether it be changing the name or adjusting the amount of time they want to work on that task for each time scale. In the same "Edit" modal, the user can also delete a task. By clicking on a task in the to-do list, the user can indicate that they have started working on it. The website will keep track of the time spent on that task, filling a progress bar to show how close the user is to reaching their time goal.
+2. The Time Scales are the overlapping tracking periods the user wants to measure their progress against (like a 1-day "Daily" scale or a 7-day "Weekly" scale). The user can create, edit, or delete these scales, setting a specific duration in days and a start date. The time scales section displays two progress bars for each scale: one showing how close the user is to finishing all their assigned task goals for that period, and another showing how much workable time has actually passed.
+3. The Agenda is a visual schedule broken into 15-minute chunks. By clicking and dragging their mouse across the grid, the user can block out times when they are asleep, at work, or otherwise unavailable. The application then automatically subtracts these "busy" blocks from the active Time Scales, giving the user a highly accurate picture of their actual workable hours remaining. The amount of time worked on tasks is also visualized in the calendar in green.
+
+### Technical Details
+The application uses a system of audio notifications to provide active feedback to the user. It plays a single chime when a specific time goal is crossed, a double chime when an entire task is completed, and three chimes when the goals for a full Time Scale are reached. A ringing alarm will also sound if the remaining workable time drops to within 5 minutes of the time needed to finish the active tasks.
+
+All of the user's tasks, schedules, and active timers are saved to the browser's `localStorage`. This means the user's progress is completely safe if they accidentally refresh or close the page, though the data cannot yet be exported to another device.
+
+### AI Disclosure
+Google Gemini 3.1 was used to assist in designing the code responsible for the agenda selection system. The code remains essentially the human developer's original work.

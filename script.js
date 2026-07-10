@@ -763,7 +763,9 @@ function RenderAgenda() {
             })()}
         </table>
     `;
-
+    
+    
+    // --- Disclosure: Google Gemini 3.1 was used to design part of the code responsible for the agenda selection system below. The code remains essentially the human developpers work. ---
     const table = document.getElementById("agenda-table");
     let isDragging = false;
     let isSelecting = true;
