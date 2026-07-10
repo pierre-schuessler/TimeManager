@@ -663,8 +663,6 @@ function resetTimes(){
     RenderAgenda()
 }
 
-
-
 function RenderAgenda() { 
     const container = document.getElementById("root-agenda");
     
@@ -683,15 +681,15 @@ function RenderAgenda() {
         return baseDate.getTime() + (dayOffset * 24 * 60 * 60 * 1000) + (timeOffset * 15 * 60 * 1000);
     };
 
-    const getCellBgStyles = (isBusy, totalSecondsWorked, isToday) => {
+    const getCellBgStyles = (busy, totalSecondsWorked, isToday) => {
         const hasWork = totalSecondsWorked > 0;
         const percent = hasWork ? Math.min(1, totalSecondsWorked / 900) : 0;
         const greenColor = `rgba(76, 255, 80, ${Math.max(0.2, percent)})`;
         let styles = {};
 
-        if (isBusy && hasWork) {
+        if (busy && hasWork) {
             styles = { background: `linear-gradient(135deg, lightcoral 30%, ${greenColor} 70%)`, backgroundColor: '' };
-        } else if (isBusy) {
+        } else if (busy) {
             styles = { background: '', backgroundColor: 'lightcoral' };
         } else if (hasWork) {
             styles = { background: '', backgroundColor: greenColor };
@@ -738,17 +736,17 @@ function RenderAgenda() {
                         
                         const agendaItem = state.agenda.find(item => item.iso === isoString);
                         let totalSecondsWorked = 0;
-                        let isBusy = false;
+                        let busy = false;
                         
                         if (agendaItem) {
-                            isBusy = agendaItem.busy;
+                            busy = agendaItem.busy;
                             if (agendaItem.tasksWorked) {
                                 totalSecondsWorked = Object.values(agendaItem.tasksWorked).reduce((sum, val) => sum + val, 0);
                             }
                         }
                         
                         
-                        const bg = getCellBgStyles(isBusy, totalSecondsWorked, isToday);
+                        const bg = getCellBgStyles(busy, totalSecondsWorked, isToday);
                         
                         let inlineStyleStr = bg.background ? `background: ${bg.background};` : `background-color: ${bg.backgroundColor};`;
                         if (bg.borderLeft) {
@@ -763,97 +761,64 @@ function RenderAgenda() {
             })()}
         </table>
     `;
-    
-    
-    // --- Disclosure: Google Gemini 3.1 was used to design part of the code responsible for the agenda selection system below. The code remains essentially the human developpers work. ---
+
+    buildAgendaSelector(getCellBgStyles)
+}
+
+function buildAgendaSelector(getCellBgStyles) {
+    // --- Disclosure: Google Gemini 3.1 was used to design part of the code responsible for the agenda selection system below. The code remains essentially the human developer's work. ---
     const table = document.getElementById("agenda-table");
-    let isDragging = false;
-    let isSelecting = true;
-    let startCoords = null;
-    let currentCoords = null;
+    let startCellData = null;
+    let currentHoverData = null;
+    
+    
+    
+    const getDataFromCell = (cell) => {
+        const day = parseInt(cell.dataset.day, 10);
+        const time = parseInt(cell.dataset.time, 10);
+        const iso = cell.dataset.iso;
+        const existingSlot = state.agenda.find((slot) => slot.iso === iso);
+        const busy = existingSlot ? existingSlot.busy : false;
 
-    const parseCoords = (cell) => {
-        return {
-            day: parseInt(cell.getAttribute("data-day")),
-            time: parseInt(cell.getAttribute("data-time")),
-            iso: cell.getAttribute("data-iso")
-        };
-    };
+        return { day, time, iso, busy };
+    }
 
+    const isinBox = (target, side1, side2) => {
+        return (target.day >= Math.min(side1.day, side2.day) && target.day <= Math.max(side1.day, side2.day) && target.time >= Math.min(side1.time, side2.time) && target.time <= Math.max(side1.time, side2.time))
+    }
 
+    
     const updatePreview = () => {
-        if (!startCoords || !currentCoords) return;
-
-        const minDay = Math.min(startCoords.day, currentCoords.day);
-        const maxDay = Math.max(startCoords.day, currentCoords.day);
-        const minTime = Math.min(startCoords.time, currentCoords.time);
-        const maxTime = Math.max(startCoords.time, currentCoords.time);
+        if (!startCellData || !currentHoverData) return;
 
         document.querySelectorAll('.agenda-cell').forEach(cell => {
-            const coords = parseCoords(cell);
-            const agendaItem = state.agenda.find(item => item.iso === coords.iso);
+            const cellData = getDataFromCell(cell);
             
-            let totalSecondsWorked = 0;
-            if (agendaItem && agendaItem.tasksWorked) {
-                totalSecondsWorked = Object.values(agendaItem.tasksWorked).reduce((sum, val) => sum + val, 0);
-            }
+            const existingSlot = state.agenda.find(item => item.iso === cellData.iso);
+            const totalSecondsWorked = (existingSlot && existingSlot.tasksWorked) 
+                ? Object.values(existingSlot.tasksWorked).reduce((sum, val) => sum + val, 0) 
+                : 0;
+            const isToday = new Date(cellData.iso).toDateString() === new Date().toDateString();
             
-            const inBox = (coords.day >= minDay && coords.day <= maxDay &&coords.time >= minTime && coords.time <= maxTime);
-
-            const isOriginallyBusy = agendaItem ? agendaItem.busy : false;
-            const showBusy = inBox ? isSelecting : isOriginallyBusy;
-
-            const isToday = new Date(coords.iso).toDateString() === todayStr;
-            const bg = getCellBgStyles(showBusy, totalSecondsWorked, isToday);
+            const bg = getCellBgStyles(isinBox(cellData, startCellData, currentHoverData) ? !startCellData.busy : cellData.busy , totalSecondsWorked, isToday);
             cell.style.background = bg.background;
             cell.style.backgroundColor = bg.backgroundColor;
         });
     };
 
-    table.addEventListener("mousedown", (e) => {
-        if (e.target.tagName === "TD" && e.target.classList.contains("agenda-cell")) {
-            isDragging = true;
-            startCoords = parseCoords(e.target);
-            currentCoords = startCoords;
+    table.addEventListener("mousedown", (event) => {
+        if (event.target.tagName === "TD" && event.target.classList.contains("agenda-cell")) {
+            startCellData = getDataFromCell(event.target);
+            currentHoverData = startCellData;
             
-            isSelecting = !state.agenda.some(item => item.iso === startCoords.iso && item.busy);
-
             updatePreview();
-            RenderTimeScales();
         }
     });
 
-    table.addEventListener("mouseover", (e) => {
-        if (isDragging && e.target.tagName === "TD" && e.target.classList.contains("agenda-cell")) {
-            currentCoords = parseCoords(e.target);
+    table.addEventListener("mouseover", (event) => {
+        if (startCellData && event.target.tagName === "TD" && event.target.classList.contains("agenda-cell")) {
+            currentHoverData = getDataFromCell(event.target);
             updatePreview();
-
-            const minDay = Math.min(startCoords.day, currentCoords.day);
-            const maxDay = Math.max(startCoords.day, currentCoords.day);
-            const minTime = Math.min(startCoords.time, currentCoords.time);
-            const maxTime = Math.max(startCoords.time, currentCoords.time);
-
-            let tempAgenda = JSON.parse(JSON.stringify(state.agenda));
-
-            for (let d = minDay; d <= maxDay; d++) {
-                for (let t = minTime; t <= maxTime; t++) {
-                    const isoString = new Date(getTimestamp(d, t)).toISOString();
-                    const existingItem = tempAgenda.find(item => item.iso === isoString);
-                    
-                    if (isSelecting) {
-                        if (existingItem) {
-                            existingItem.busy = true;
-                        } else {
-                            tempAgenda.push({ iso: isoString, busy: true, tasksWorked: {} });
-                        }
-                    } else {
-                        if (existingItem) {
-                            existingItem.busy = false;
-                        }
-                    }
-                }
-            }
-            RenderTimeScales(tempAgenda);
         }
     });
 
@@ -862,24 +827,19 @@ function RenderAgenda() {
     }
 
     window.agendaMouseUpHandler = () => {
-        if (isDragging && startCoords && currentCoords) {
-            isDragging = false;
+        if (startCellData && currentHoverData) {
 
-            const minDay = Math.min(startCoords.day, currentCoords.day);
-            const maxDay = Math.max(startCoords.day, currentCoords.day);
-            const minTime = Math.min(startCoords.time, currentCoords.time);
-            const maxTime = Math.max(startCoords.time, currentCoords.time);
-
-            for (let d = minDay; d <= maxDay; d++) {
-                for (let t = minTime; t <= maxTime; t++) {
-                    const isoString = new Date(getTimestamp(d, t)).toISOString();
-                    const existingItem = state.agenda.find(item => item.iso === isoString);
+            document.querySelectorAll('.agenda-cell').forEach(cell => {
+                const cellData = getDataFromCell(cell);
+                
+                if (isinBox(cellData, startCellData, currentHoverData)) {
+                    let existingItem = state.agenda.find(item => item.iso === cellData.iso);
                     
-                    if (isSelecting) {
+                    if (!startCellData.busy) {
                         if (existingItem) {
                             existingItem.busy = true;
                         } else {
-                            state.agenda.push({ iso: isoString, busy: true, tasksWorked: {} });
+                            state.agenda.push({ iso: cellData.iso, busy: true, tasksWorked: {} });
                         }
                     } else {
                         if (existingItem) {
@@ -887,13 +847,15 @@ function RenderAgenda() {
                         }
                     }
                 }
-            }
+            });
 
-            startCoords = null;
-            currentCoords = null;
+            startCellData = null;
+            currentHoverData = null;
+            
+            
             Save();
-            RenderTimeScales(); 
-            RenderAgenda(); 
+            RenderTimeScales();
+            RenderAgenda();
         }
     };
 
