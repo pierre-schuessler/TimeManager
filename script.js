@@ -53,7 +53,7 @@ function Save() {
 
     // remove uselless agenda items
     state.agenda = state.agenda.filter((item)=>{
-        return (item.busy | item.tasksWorked)
+        return (item.busy || item.tasksWorked)
     })
     localStorage.setItem("agenda", JSON.stringify(state.agenda))
 }
@@ -489,8 +489,9 @@ function deleteTimeScale(id) {
 }
 
 function formatDuration(ms) {
-    if (ms <= 0) return "00:00:00";
     
+    let output = ms < 0 ? "-" : ""
+
     const totalSeconds = Math.floor(ms / 1000);
     
     const days = Math.floor(totalSeconds / 86400);
@@ -502,10 +503,13 @@ function formatDuration(ms) {
     
     if (days > 0) {
         
-        return `${days.toString().padStart(2, "0")}:${formattedTime}`;
+        output += `${days.toString().padStart(2, "0")}:${formattedTime}`;
+    }
+    else{
+        output = formattedTime
     }
     
-    return formattedTime;
+    return output;
 }
 
 function RenderTimeScales(agendaData = state.agenda) {
@@ -549,12 +553,7 @@ function RenderTimeScales(agendaData = state.agenda) {
 
                     if (blockStartMs >= startTimeMs && blockStartMs < scaleEndMs) {
                         totalExcludedTimeMs += slotDurationMs;
-
-                        if (currentTime >= blockEndMs) {
-                            passedExcludedTimeMs += slotDurationMs;
-                        } else if (currentTime > blockStartMs && currentTime < blockEndMs) {
-                            passedExcludedTimeMs += (currentTime - blockStartMs);
-                        }
+                        passedExcludedTimeMs += Math.max( Math.min(slotDurationMs, currentTime - blockStartMs),  0)
                     }
                 });
 
@@ -707,33 +706,35 @@ function RenderAgenda() {
 
         return styles;
     };
+    
 
     container.innerHTML = `
         <h3>Agenda</h3>
         <table id="agenda-table" style="user-select: none;">
             ${(() => {
-                const longestScale = state.timeScales.reduce((max, scale) => Math.max(max, scale.duration), 0);
-                const rows = [];
+                const longestScaleLengthDays = state.timeScales.reduce((max, scale) => Math.max(max, scale.duration), 0);
+                let html_output = '';
                 const headerCells = ['<th class="agenda-top-left-empty"></th>'];
 
-                for (let j = 0; j < longestScale; j++) {
+                for (let j = 0; j < longestScaleLengthDays; j++) {
                     const currentDate = new Date(baseDate.getTime() + j * 24 * 60 * 60 * 1000);
                     const dateString = currentDate.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' });
-                    headerCells.push(`<th class="agenda-date-header" style="font-weight: bold;">${dateString}</th>`);
+                    headerCells.push(`<th class="agenda-date-header">${dateString}</th>`);
                 }
-                rows.push(`<tr>${headerCells.join("")}</tr>`);
+                html_output += `<tr>${headerCells.join("")}</tr>`;
 
                 for (let i = 0; i < 24 * 4; i++) {
                     const isFullHour = i % 4 === 0;
                     const timeLabel = new Date(0, 0, 0, Math.floor(i / 4), (i % 4) * 15)
                         .toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-                    const labelContent = isFullHour ? timeLabel : '';
-                    const rowCells = [`<td class="agenda-time-label${isFullHour ? " agenda-time-label-full-hour" : ""}" style="font-weight: 700; text-align: center;">${labelContent}</td>`];
+                    const labelContent = isFullHour ? timeLabel : "";
+                    const rowCells = [`<td class="agenda-time-label ${isFullHour ? "agenda-time-label-full-hour" : ""}">${labelContent}</td>`];
 
-                    for (let j = 0; j < longestScale; j++) {
-                        const ts = getTimestamp(j, i);
-                        const isoString = new Date(ts).toISOString();
+                    for (let j = 0; j < longestScaleLengthDays; j++) {
+                        const timestamp = getTimestamp(j, i);
+                        const isoString = new Date(timestamp).toISOString();
+                        const isToday = new Date(timestamp).toDateString() === todayStr;
                         
                         const agendaItem = state.agenda.find(item => item.iso === isoString);
                         let totalSecondsWorked = 0;
@@ -746,7 +747,7 @@ function RenderAgenda() {
                             }
                         }
                         
-                        const isToday = new Date(ts).toDateString() === todayStr;
+                        
                         const bg = getCellBgStyles(isBusy, totalSecondsWorked, isToday);
                         
                         let inlineStyleStr = bg.background ? `background: ${bg.background};` : `background-color: ${bg.backgroundColor};`;
@@ -754,11 +755,11 @@ function RenderAgenda() {
                             inlineStyleStr += ` border-left: ${bg.borderLeft}; border-right: ${bg.borderRight};`;
                         }
                         
-                        rowCells.push(`<td class="agenda-cell" data-day="${j}" data-time="${i}" data-iso="${isoString}" style="border: 1px solid black; border-top: ${isFullHour ? "3" : "1"}px solid black; min-width: 40px; ${inlineStyleStr}"></td>`);
+                        rowCells.push(`<td class="agenda-cell" data-day="${j}" data-time="${i}" data-iso="${isoString}" style="border-top: ${isFullHour ? "3" : "1"}px solid black; ${inlineStyleStr}"></td>`);
                     }
-                    rows.push(`<tr>${rowCells.join("")}</tr>`);
+                    html_output += `<tr>${rowCells.join("")}</tr>`;
                 }
-                return rows.join('');
+                return html_output;
             })()}
         </table>
     `;
@@ -776,6 +777,7 @@ function RenderAgenda() {
             iso: cell.getAttribute("data-iso")
         };
     };
+
 
     const updatePreview = () => {
         if (!startCoords || !currentCoords) return;

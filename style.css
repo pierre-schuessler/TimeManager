@@ -9,7 +9,7 @@
     --border-lighter: #e5e7eb;
     --overlay-bg: rgba(0, 0, 0, 0.5);
     
-    /* Spacing */
+    /* Spacings */
     --spacing-xs: 0.2rem;
     --spacing-sm: 0.45rem;
     --spacing-md: 0.5rem;
@@ -17,20 +17,20 @@
     --spacing-xl: 1rem;
     --spacing-2xl: 1.5rem;
     
-    /* Border Radius */
+    /* Border radii */
     --radius-sm: 0.5rem;
     --radius-md: 0.7rem;
     --radius-lg: 0.8em;
     --radius-xl: 1em;
     
-    /* Font Sizes */
+    /* Font sizes */
     --font-xs: 0.55rem;
     --font-sm: 0.875rem;
     --font-base: 1rem;
     --font-lg: 1.5rem;
     
-    /* Transitions */
-    --transition-fast: 0.2s ease;
+    /* transitions */
+    --transition: 0.2s ease;
     
     /* Borders */
     --border-standard: 1px solid black;
@@ -116,7 +116,7 @@ footer {
     background: hsl(120, 73%, 75%);
 }
 
-.task.active:hover{ /*slightly darker*/
+.task.active:hover{
     background: hsl(120, 73%, 70%);
 }
 
@@ -214,8 +214,8 @@ h3 {
 }
 
 #agenda-table {
-    width: 100%; /* ADDED: Forces table to span full container width */
-    table-layout: fixed; /* ADDED: Ensures strict width enforcement */
+    width: 100%;
+    table-layout: fixed;
     border-collapse: collapse;
     border-spacing: 0;
     font-size: var(--font-base);
@@ -244,6 +244,7 @@ h3 {
     font-size: var(--font-xs);
     line-height: 0.7;
     text-align: center;
+    font-weight: 700;
 }
 
 #agenda-table .agenda-time-label-full-hour {
@@ -253,9 +254,11 @@ h3 {
 }
 
 #agenda-table .agenda-cell {
-    width: 100%; /* ADDED: Forces agenda cells to expand */
+    width: 100%;
     min-width: 18px;
     height: 0.5rem;
+    border: var(--border-standard);
+    min-width: 40px;
 }
 
 .modal-overlay {
@@ -271,7 +274,7 @@ h3 {
     z-index: 100;
     opacity: 0;
     pointer-events: none;
-    transition: opacity var(--transition-fast);
+    transition: opacity var(--transition);
 }
 
 .modal-overlay.active {
@@ -288,7 +291,7 @@ h3 {
     display: flex;
     flex-direction: column;
     transform: translateY(20px);
-    transition: transform var(--transition-fast);
+    transition: transform var(--transition);
 }
 
 .modal-overlay.active .modal-content {
@@ -333,7 +336,7 @@ h3 {
     border-radius: var(--radius-xl);
     border: none;
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: all var(--transition);
     background: transparent;
 }
 
@@ -396,7 +399,7 @@ textarea {
     border-radius: var(--radius-md);
     font-family: inherit;
     font-size: var(--font-sm);
-    transition: border-color var(--transition-fast);
+    transition: border-color var(--transition);
 }
 
 input:focus,
@@ -427,6 +430,10 @@ textarea {
 
 .edit-icon {
     cursor: pointer;
+}
+
+.agenda-date-header {
+    font-weight: bold;
 }
 
 .agenda-item {
