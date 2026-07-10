@@ -509,6 +509,10 @@ function formatDuration(ms) {
 }
 
 function RenderTimeScales(agendaData = state.agenda) {
+    if (checkTimeScaleDone()){
+        return;
+    }
+
     const container = document.getElementById("root-time-scales");
     container.innerHTML = `
         <h3>Time Scales</h3>
@@ -559,9 +563,10 @@ function RenderTimeScales(agendaData = state.agenda) {
                 const timeUsed = rawTimeUsed - passedExcludedTimeMs;
 
                 const timeRemaining = totalTimeMs - timeUsed;
-                const taskRemaining = totals.goal - totals.elapsed;
+                const taskRemainingMs = (totals.goal - totals.elapsed) * 1000;
 
-                if (taskRemaining > 0 && (timeRemaining - taskRemaining) <= 5 * 60 * 1000) { 
+                if (taskRemainingMs > 0 && (timeRemaining - taskRemainingMs) <= 5 * 60 * 1000) { 
+                    console.log(`RING TRIGGERED for "${scale.name}". Time Remaining: ${timeRemaining/1000}s, Tasks Remaining: ${taskRemainingMs/1000}s.`);
                     if (!scale.hasRung) { 
                         ring();
                         document.getElementById("modal-title").innerText = "Time Alert";
@@ -624,7 +629,6 @@ function RenderTimeScales(agendaData = state.agenda) {
 }
 
 let timeScalesRenderInterval = setInterval(()=>{
-    checkTimeScaleDone()
     RenderTimeScales()
 }, 1000);
 
@@ -885,6 +889,7 @@ function checkTimeScaleDone() {
         const scaleDurationMs = scale.duration * 24 * 60 * 60 * 1000;
         
         if (new Date(scale.start).getTime() + scaleDurationMs < new Date().getTime()) {
+            console.log(`Time scale reset for "${scale.name}".`);
             let newDate = new Date()
             newDate.setHours(0,0,0,0)
             scale.start = newDate.toISOString();
@@ -915,6 +920,8 @@ function checkTimeScaleDone() {
         RenderTimeScales()
         RenderAgenda()
     }
+
+    return SomethingChanged;
 }
 
 function openHelp(){
