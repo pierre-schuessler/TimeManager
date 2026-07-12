@@ -189,7 +189,7 @@ function toggleTask(id, UITarget) {
                 if (!agendaBlock.tasksWorked) {
                     agendaBlock.tasksWorked = {};
                 }
-
+                
                 
                 let timeInThisSlotSeconds = timeInThisSlot / 1000; //s
                 agendaBlock.tasksWorked[task.id] = (agendaBlock.tasksWorked[task.id] || 0) + timeInThisSlotSeconds;
@@ -197,8 +197,9 @@ function toggleTask(id, UITarget) {
                 
                 timeMarker -= timeInThisSlot;
                 timeRemaining -= timeInThisSlot;
-            }
 
+                updatePreview()
+            }
 
             const wasAllCompleted = state.timeScales.every(scale =>
                 task.times[scale.id].elapsed >= task.times[scale.id].goal
@@ -457,6 +458,7 @@ function editTimeScale(id) {
             scale.start = newStart;
             Save();
             RenderTimeScales();
+            RenderTasks()
             RenderAgenda()
             closeModal("modal");
         } else {
@@ -511,6 +513,8 @@ function formatDuration(ms) {
     
     return output;
 }
+
+let isEditingAgenda = false;
 
 function RenderTimeScales(agendaData = state.agenda) {
     if (checkTimeScaleDone()){
@@ -628,7 +632,7 @@ function RenderTimeScales(agendaData = state.agenda) {
 }
 
 let timeScalesRenderInterval = setInterval(()=>{
-    RenderTimeScales()
+    if (!isEditingAgenda) RenderTimeScales()
 }, 1000);
 
 function resetTimes(){
@@ -663,25 +667,7 @@ function resetTimes(){
     RenderAgenda()
 }
 
-function RenderAgenda() { 
-    const container = document.getElementById("root-agenda");
-    
-    const earliestStart = state.timeScales.reduce((min, scale) => {
-        const scaleStart = new Date(scale.start).getTime();
-        return scaleStart < min ? scaleStart : min;
-    }, Infinity);
-
-    const baseDate = new Date(earliestStart);
-    baseDate.setHours(0, 0, 0, 0);
-    
-    
-    const todayStr = new Date().toDateString();
-    
-    const getTimestamp = (dayOffset, timeOffset) => {
-        return baseDate.getTime() + (dayOffset * 24 * 60 * 60 * 1000) + (timeOffset * 15 * 60 * 1000);
-    };
-
-    const getCellBgStyles = (busy, totalSecondsWorked, isToday) => {
+const getCellBgStyles = (busy, totalSecondsWorked, isToday) => {
         const hasWork = totalSecondsWorked > 0;
         const percent = hasWork ? Math.min(1, totalSecondsWorked / 900) : 0;
         const greenColor = `rgba(76, 255, 80, ${Math.max(0.2, percent)})`;
@@ -704,7 +690,23 @@ function RenderAgenda() {
 
         return styles;
     };
+
+function RenderAgenda() { 
+    const container = document.getElementById("root-agenda");
     
+    const earliestStart = state.timeScales.reduce((min, scale) => {
+        const scaleStart = new Date(scale.start).getTime();
+        return scaleStart < min ? scaleStart : min;
+    }, Infinity);
+
+    const baseDate = new Date(earliestStart);
+    baseDate.setHours(0, 0, 0, 0);
+    
+    const todayStr = new Date().toDateString();
+    
+    const getTimestamp = (dayOffset, timeOffset) => {
+        return baseDate.getTime() + (dayOffset * 24 * 60 * 60 * 1000) + (timeOffset * 15 * 60 * 1000);
+    };
 
     container.innerHTML = `
         <h3>Agenda</h3>
@@ -762,18 +764,10 @@ function RenderAgenda() {
         </table>
     `;
 
-    buildAgendaSelector(getCellBgStyles)
+    buildAgendaSelector()
 }
 
-function buildAgendaSelector(getCellBgStyles) {
-    // --- Disclosure: Google Gemini 3.1 was used to design part of the code responsible for the agenda selection system below. The code remains essentially the human developer's work. ---
-    const table = document.getElementById("agenda-table");
-    let startCellData = null;
-    let currentHoverData = null;
-    
-    
-    
-    const getDataFromCell = (cell) => {
+const getDataFromCell = (cell) => {
         const day = parseInt(cell.dataset.day, 10);
         const time = parseInt(cell.dataset.time, 10);
         const iso = cell.dataset.iso;
@@ -787,10 +781,7 @@ function buildAgendaSelector(getCellBgStyles) {
         return (target.day >= Math.min(side1.day, side2.day) && target.day <= Math.max(side1.day, side2.day) && target.time >= Math.min(side1.time, side2.time) && target.time <= Math.max(side1.time, side2.time))
     }
 
-    
-    const updatePreview = () => {
-        if (!startCellData || !currentHoverData) return;
-
+const updatePreview = (startCellData, currentHoverData) => {
         document.querySelectorAll('.agenda-cell').forEach(cell => {
             const cellData = getDataFromCell(cell);
             
@@ -799,11 +790,35 @@ function buildAgendaSelector(getCellBgStyles) {
                 ? Object.values(existingSlot.tasksWorked).reduce((sum, val) => sum + val, 0) 
                 : 0;
             const isToday = new Date(cellData.iso).toDateString() === new Date().toDateString();
-            
-            const bg = getCellBgStyles(isinBox(cellData, startCellData, currentHoverData) ? !startCellData.busy : cellData.busy , totalSecondsWorked, isToday);
+            let bg;
+            if (startCellData && currentHoverData)  bg = getCellBgStyles(isinBox(cellData, startCellData, currentHoverData) ? !startCellData.busy : cellData.busy , totalSecondsWorked, isToday);
+            else bg = getCellBgStyles(cellData.busy, totalSecondsWorked, isToday)
             cell.style.background = bg.background;
             cell.style.backgroundColor = bg.backgroundColor;
         });
+    };
+
+function buildAgendaSelector() {
+    const table = document.getElementById("agenda-table");
+    let startCellData = null;
+    let currentHoverData = null;
+
+    const getPreviewAgenda = (start, current) => {
+        let previewAgenda = JSON.parse(JSON.stringify(state.agenda));
+        document.querySelectorAll('.agenda-cell').forEach(cell => {
+            const cellData = getDataFromCell(cell);
+            if (isinBox(cellData, start, current)) {
+                let existingItem = previewAgenda.find(item => item.iso === cellData.iso);
+                if (!start.busy) {
+
+                    if (existingItem) existingItem.busy = true;
+                    else previewAgenda.push({ iso: cellData.iso, busy: true, tasksWorked: {} });
+                } else {
+                    if (existingItem) existingItem.busy = false;
+                }
+            }
+        });
+        return previewAgenda;
     };
 
     table.addEventListener("mousedown", (event) => {
@@ -811,14 +826,18 @@ function buildAgendaSelector(getCellBgStyles) {
             startCellData = getDataFromCell(event.target);
             currentHoverData = startCellData;
             
-            updatePreview();
+            updatePreview(startCellData, currentHoverData);
+            RenderTimeScales(getPreviewAgenda(startCellData, currentHoverData));
+            isEditingAgenda = true;
         }
     });
 
     table.addEventListener("mouseover", (event) => {
         if (startCellData && event.target.tagName === "TD" && event.target.classList.contains("agenda-cell")) {
             currentHoverData = getDataFromCell(event.target);
-            updatePreview();
+            
+            updatePreview(startCellData, currentHoverData);
+            RenderTimeScales(getPreviewAgenda(startCellData, currentHoverData));
         }
     });
 
@@ -851,7 +870,7 @@ function buildAgendaSelector(getCellBgStyles) {
 
             startCellData = null;
             currentHoverData = null;
-            
+            isEditingAgenda = false;
             
             Save();
             RenderTimeScales();
@@ -945,7 +964,6 @@ function openHelp(){
     }
     openModal("modal");
 }
-
 
 openModal = (id) => document.getElementById(id).classList.add('active');
 closeModal = (id) => {
