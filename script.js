@@ -455,7 +455,10 @@ function editTimeScale(id) {
         if (newName && !isNaN(newDuration) && newStart) {
             scale.name = newName;
             scale.duration = newDuration;
-            scale.start = newStart;
+
+            let localDate = new Date(newStart + "T00:00:00"); 
+            scale.start = localDate.toISOString();
+            
             Save();
             RenderTimeScales();
             RenderTasks()
