@@ -272,6 +272,18 @@ function toggleTask(id, UITarget) {
     }
 }
 
+function moveTaskUp(id) {
+    const index = state.tasks.findIndex(task => task.id === id);
+    
+    if (index > 0) {
+        const taskToMove = state.tasks.splice(index, 1)[0];
+        state.tasks.splice(index - 1, 0, taskToMove);
+        
+        Save();
+        RenderTasks();
+    }
+}
+
 function editTask(id) {
     let task = state.tasks.find((task) => task.id === id);
     document.getElementById("modal-title").innerText = "Edit Task";
@@ -302,8 +314,15 @@ function editTask(id) {
         }
     `;
 
-    document.getElementById('btn-submit').insertAdjacentHTML('beforebegin', `<button class="btn btn-danger" id="delete-button" onclick="deleteTask('${task.id}')">Delete</button>`);
-        
+    const moveUpButtonHTML = taskIndex > 0 
+        ? `<button class="btn btn-secondary" id="move-up-button" onclick="moveTaskUp('${task.id}')" style="margin-right: 5px;">Move Up</button>` 
+        : '';
+
+    document.getElementById('btn-submit').insertAdjacentHTML('beforebegin', `
+        ${moveUpButtonHTML}
+        <button class="btn btn-danger" id="delete-button" onclick="deleteTask('${task.id}')" style="margin-right: 5px;">Delete</button>
+    `);
+
     document.getElementById("btn-submit").innerText = "Save Changes";
     document.getElementById("btn-submit").onclick = function() {
         const newName = document.getElementById("modal-taskName").value;
@@ -998,8 +1017,9 @@ function openHelp(){
 
 openModal = (id) => document.getElementById(id).classList.add('active');
 closeModal = (id) => {
-    document.getElementById("delete-button")?.remove()
-    document.getElementById(id).classList.remove('active')
+    document.getElementById("delete-button")?.remove();
+    document.getElementById("move-up-button")?.remove();
+    document.getElementById(id).classList.remove('active');
 };
 
 Load()
