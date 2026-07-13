@@ -286,6 +286,7 @@ function moveTaskUp(id) {
 
 function editTask(id) {
     let task = state.tasks.find((task) => task.id === id);
+    let taskIndex = state.tasks.findIndex((task) => task.id === id);
     document.getElementById("modal-title").innerText = "Edit Task";
     
     document.getElementById("modal-body").innerHTML = `
