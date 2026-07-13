@@ -605,12 +605,12 @@ function RenderTimeScales(agendaData = state.agenda) {
 
                 const initialFreeTimeMs = Math.max(0, totalTimeMs - (totals.goal * 1000));
 
-                const freeTimeMs = Math.max(0, timeRemaining - taskRemainingMs);
+                const freeTimeUsedMs = Math.max(0, initialFreeTimeMs - (timeRemaining - taskRemainingMs));
 
 
-                const freeTimePercentage = (initialFreeTimeMs > 0)
-                    ? Math.max(0, Math.min(100, (freeTimeMs / initialFreeTimeMs) * 100))
-                    : (freeTimeMs > 0 ? 100 : 0); 
+                const freeTimeUsedPercentage = (initialFreeTimeMs > 0)
+                    ? Math.max(0, Math.min(100, (freeTimeUsedMs / initialFreeTimeMs) * 100))
+                    : (freeTimeUsedMs > 0 ? 100 : 0); 
                 
 
                 if (taskRemainingMs > 0 && (timeRemaining - taskRemainingMs) <= 5 * 60 * 1000) { 
@@ -661,11 +661,11 @@ function RenderTimeScales(agendaData = state.agenda) {
                             <div class="time-scale-progress-block">
                                 <div class="time-scale-progress-meta">
                                     <span>Free time</span>
-                                    <span>${freeTimePercentage.toFixed(1)}%</span>
-                                    <span>${formatDuration(freeTimeMs)} / ${formatDuration(initialFreeTimeMs)}</span>
+                                    <span>${freeTimeUsedPercentage.toFixed(1)}%</span>
+                                    <span>${formatDuration(freeTimeUSedMs)} / ${formatDuration(initialFreeTimeMs)}</span>
                                 </div>
                                 <div class="progress-bar">
-                                    <div class="progress-bar-fill" style="width: ${freeTimePercentage}%;"></div>
+                                    <div class="progress-bar-fill" style="width: ${freeTimeUsedPercentage}%;"></div>
                                 </div>
                             </div>
                             <div class="time-scale-progress-block">
