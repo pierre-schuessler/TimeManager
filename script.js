@@ -55,11 +55,21 @@ function Save() {
     })
     localStorage.setItem("tasks", JSON.stringify(tasksToSave))
 
+    const earliestStart = state.timeScales.reduce((min, scale) => {
+        const scaleStart = new Date(scale.start).getTime();
+        return scaleStart < min ? scaleStart : min;
+    }, Infinity);
+
     // remove uselless agenda items
-    state.agenda = state.agenda.filter((item)=>{
-        return (item.busy || item.tasksWorked)
-    })
-    localStorage.setItem("agenda", JSON.stringify(state.agenda))
+    state.agenda = state.agenda.filter((item) => {
+        const itemTime = new Date(item.iso).getTime();
+        const hasData = item.busy || item.tasksWorked;
+        const isAfterStart = itemTime >= (earliestStart - 2 * 86400); // two day padding
+        
+        return hasData && isAfterStart;
+    });
+
+    localStorage.setItem("agenda", JSON.stringify(state.agenda));
     localStorage.setItem("statistics", JSON.stringify(state.statistics));
 }
 
