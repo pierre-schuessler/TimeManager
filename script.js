@@ -1,7 +1,8 @@
 let state = {
     tasks: [],
     timeScales: [],
-    agenda: [] 
+    agenda: [],
+    statistics: []
 }
 
 function Load() {
@@ -38,6 +39,9 @@ function Load() {
         }
         return null;
     }).filter(Boolean);
+
+    let savedStats = localStorage.getItem("statistics");
+    state.statistics = savedStats ? JSON.parse(savedStats) : [];
 }
 
 function Save() {
@@ -56,6 +60,7 @@ function Save() {
         return (item.busy || item.tasksWorked)
     })
     localStorage.setItem("agenda", JSON.stringify(state.agenda))
+    localStorage.setItem("statistics", JSON.stringify(state.statistics));
 }
 
 
@@ -78,7 +83,6 @@ function processDingQueue() {
         }, i * 500);
     }
     
-    
     setTimeout(processDingQueue, (n * 500) + 800);
 }
 
@@ -93,7 +97,6 @@ function ring(){
     const audio = new Audio('ring.mp3');
     audio.play();
 }
-
 
 function createNewTask(){
     let times = {}
@@ -116,6 +119,7 @@ function createNewTask(){
     RenderTasks()
     RenderTimeScales()
 }
+
 function getCurrentAgendaSlot() {
     let now = new Date();
     let minutes = Math.floor(now.getMinutes() / 15) * 15;
@@ -162,7 +166,7 @@ function toggleTask(id, UITarget) {
             while (timeRemaining > 0) {
                 let markerDate = new Date(timeMarker);
                 
-               
+                
                 let minutes = Math.floor(markerDate.getMinutes() / 15) * 15;
                 let slotStart = new Date(markerDate.getFullYear(), markerDate.getMonth(), markerDate.getDate(), markerDate.getHours(), minutes, 0, 0);
                 let slotStartTime = slotStart.getTime();
@@ -190,11 +194,9 @@ function toggleTask(id, UITarget) {
                     agendaBlock.tasksWorked = {};
                 }
                 
-                
-                let timeInThisSlotSeconds = timeInThisSlot / 1000; //s
+                let timeInThisSlotSeconds = timeInThisSlot / 1000;
                 agendaBlock.tasksWorked[task.id] = (agendaBlock.tasksWorked[task.id] || 0) + timeInThisSlotSeconds;
 
-                
                 timeMarker -= timeInThisSlot;
                 timeRemaining -= timeInThisSlot;
 
@@ -892,6 +894,23 @@ function checkTimeScaleDone() {
         
         if (new Date(scale.start).getTime() + scaleDurationMs < new Date().getTime()) {
             console.log(`Time scale reset for "${scale.name}".`);
+
+            const totals = state.tasks.reduce((acc, task) => {
+                acc.elapsed += Number(task.times[scale.id]?.elapsed) || 0; 
+                acc.goal += Number(task.times[scale.id]?.goal) || 0;
+                return acc;
+            }, { elapsed: 0, goal: 0 });
+
+            state.statistics.push({
+                scaleId: scale.id,
+                name: scale.name,
+                timeWorked: totals.elapsed,
+                goal: totals.goal,
+                duration: scale.duration,
+                start: scale.start,
+                ended: new Date().toISOString()
+            });
+            
             let newDate = new Date()
             newDate.setHours(0,0,0,0)
             scale.start = newDate.toISOString();
