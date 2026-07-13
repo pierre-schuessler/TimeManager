@@ -918,7 +918,6 @@ function checkTimeScaleDone() {
                 goal: totals.goal,
                 duration: scale.duration,
                 start: scale.start,
-                ended: new Date().toISOString()
             });
             
             let newDate = new Date()
