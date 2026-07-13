@@ -120,6 +120,17 @@ footer {
     background: hsl(120, 73%, 70%);
 }
 
+
+@keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+
+
+.subtask-done {
+    animation: fadeOut 5s linear forwards; 
+}
+
 .task-main-content {
     width: 100%;
     display: flex;

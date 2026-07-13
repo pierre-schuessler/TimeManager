@@ -45,15 +45,22 @@ function Load() {
 }
 
 function Save() {
-    localStorage.setItem("timeScales", JSON.stringify(state.timeScales))
+    localStorage.setItem("timeScales", JSON.stringify(state.timeScales));
 
-    let tasksToSave = state.tasks.map((task)=>{
+    let tasksToSave = state.tasks.map((task) => {
+        let cleanSubtasks = task.subtasks.map((subtask) => {
+            let { deleteTimeout, ...cleanSubtask } = subtask;
+            return cleanSubtask;
+        });
+
         return {
             ...task,
-            running: false
-        }
-    })
-    localStorage.setItem("tasks", JSON.stringify(tasksToSave))
+            running: false,
+            subtasks: cleanSubtasks
+        };
+    });
+    
+    localStorage.setItem("tasks", JSON.stringify(tasksToSave));
 
     const earliestStart = state.timeScales.reduce((min, scale) => {
         const scaleStart = new Date(scale.start).getTime();
@@ -122,7 +129,8 @@ function createNewTask(){
             id : crypto.randomUUID(),
             name: "New Task",
             times: times,
-            running: false
+            running: false,
+            subtasks: []
         }
     )
     Save()
@@ -381,6 +389,46 @@ function deleteTask(id) {
     closeModal("modal")
 }
 
+function createNewSubtask(id) {
+    let task = state.tasks.find((task) => task.id === id);
+    let subtaskName = prompt("What do you need to do?");
+    
+    if (subtaskName && subtaskName.trim() !== "") {
+        task.subtasks.push({ name: subtaskName, done: false });
+        Save();
+        RenderTasks();
+    }
+}
+
+function toggleSubtask(taskId, subtaskIndex) {
+    let task = state.tasks.find((task) => task.id === taskId);
+    let subtask = task.subtasks[subtaskIndex];
+
+    subtask.done = !subtask.done;
+
+    if (subtask.done) {
+        subtask.deleteTimeout = setTimeout(() => {
+            const currentIndex = task.subtasks.indexOf(subtask);
+            if (currentIndex > -1) {
+                deleteSubtask(taskId, currentIndex);
+            }
+        }, 5000);
+    } else {
+        clearTimeout(subtask.deleteTimeout);
+    }
+    
+    Save();
+    RenderTasks();
+}
+
+function deleteSubtask(taskId, subtaskIndex) {
+    let task = state.tasks.find((task) => task.id === taskId);
+    task.subtasks.splice(subtaskIndex, 1);
+    
+    Save();
+    RenderTasks();
+}
+
 function RenderTasks() {
     const container = document.getElementById("root-tasks");
     container.innerHTML = `
@@ -390,11 +438,26 @@ function RenderTasks() {
             ${
                 state.tasks.map((task)=>{
                     return `
-                        <div class="task ${task.running ? "active" : ""}" style="cursor: pointer;" onclick="if (event.target.classList.contains('edit-icon')) { return; } toggleTask('${task.id}', this)">
+                        <div class="task ${task.running ? "active" : ""}" style="cursor: pointer;" onclick="if (event.target.classList.contains('edit-icon') || event.target.closest('.subtask-area')) { return; } toggleTask('${task.id}', this)">
                             <div class="task-main-content">
                                 <div class="task-title-row">
                                     <h3 class="task-title">${task.name}</h3>
                                     <div class="task-actions edit-icon" onclick="editTask('${task.id}')">⚙</div>
+                                </div>
+                                <div class="subtask-area" style="margin: 15px 0;">
+                                    <div class="task" style="text-align: center; cursor: pointer; padding: 5px; font-size: 0.9em; margin-bottom: 10px;" onclick="createNewSubtask('${task.id}')">+ New subtask</div>
+                                    ${task.subtasks.map((subtask, index)=>{
+                                        let name = typeof subtask === 'string' ? subtask : subtask.name;
+                                        let isChecked = subtask.done ? 'checked' : '';
+                                        let textStyle = subtask.done ? 'text-decoration: line-through; opacity: 0.6;' : '';
+                                        let classname = subtask.done ? "subtask-done" : "";
+                                        
+                                        return `<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;" class="${classname}">
+                                             <input type="checkbox" ${isChecked} onclick="toggleSubtask('${task.id}', ${index})"> 
+                                             <span style="font-weight: 500; ${textStyle}">${name}</span>
+                                             
+                                        </div>`
+                                    }).join("")}
                                 </div>
                                 <div class="task-progress-list">
                                     ${state.timeScales.map((scale)=>{
