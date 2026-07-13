@@ -450,7 +450,7 @@ function RenderTasks() {
                                         let name = typeof subtask === 'string' ? subtask : subtask.name;
                                         let isChecked = subtask.done ? 'checked' : '';
                                         let textStyle = subtask.done ? 'text-decoration: line-through; opacity: 0.6;' : '';
-                                        let classname = subtask.done ? "subtask-done" : "";
+                                        let classname = subtask.done ? "task subtask-done" : "task";
                                         
                                         return `<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;" class="${classname}">
                                              <input type="checkbox" ${isChecked} onclick="toggleSubtask('${task.id}', ${index})"> 
