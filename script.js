@@ -660,9 +660,9 @@ function RenderTimeScales(agendaData = state.agenda) {
                             </div>
                             <div class="time-scale-progress-block">
                                 <div class="time-scale-progress-meta">
-                                    <span>Free time</span>
+                                    <span>Free time used</span>
                                     <span>${freeTimeUsedPercentage.toFixed(1)}%</span>
-                                    <span>${formatDuration(freeTimeUSedMs)} / ${formatDuration(initialFreeTimeMs)}</span>
+                                    <span>${formatDuration(freeTimeUsedMs)} / ${formatDuration(initialFreeTimeMs)}</span>
                                 </div>
                                 <div class="progress-bar">
                                     <div class="progress-bar-fill" style="width: ${freeTimeUsedPercentage}%;"></div>
