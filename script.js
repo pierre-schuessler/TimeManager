@@ -601,7 +601,17 @@ function RenderTimeScales(agendaData = state.agenda) {
                 const timeUsed = rawTimeUsed - passedExcludedTimeMs;
 
                 const timeRemaining = totalTimeMs - timeUsed;
-                const taskRemainingMs = (totals.goal - totals.elapsed) * 1000;
+                const taskRemainingMs = Math.max(0, (totals.goal - totals.elapsed) * 1000);
+
+                const initialFreeTimeMs = Math.max(0, totalTimeMs - (totals.goal * 1000));
+
+                const freeTimeMs = Math.max(0, timeRemaining - taskRemainingMs);
+
+
+                const freeTimePercentage = (initialFreeTimeMs > 0)
+                    ? Math.max(0, Math.min(100, (freeTimeMs / initialFreeTimeMs) * 100))
+                    : (freeTimeMs > 0 ? 100 : 0); 
+                
 
                 if (taskRemainingMs > 0 && (timeRemaining - taskRemainingMs) <= 5 * 60 * 1000) { 
                     console.log(`RING TRIGGERED for "${scale.name}". Time Remaining: ${timeRemaining/1000}s, Tasks Remaining: ${taskRemainingMs/1000}s.`);
@@ -643,6 +653,16 @@ function RenderTimeScales(agendaData = state.agenda) {
                                     <span>Tasks</span>
                                     <span>${taskPercentage.toFixed(1)}%</span>
                                     <span>${new Date(totals.elapsed * 1000).toISOString().substring(11, 19)} / ${new Date(totals.goal * 1000).toISOString().substring(11, 19)}</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-bar-fill" style="width: ${taskPercentage}%;"></div>
+                                </div>
+                            </div>
+                            <div class="time-scale-progress-block">
+                                <div class="time-scale-progress-meta">
+                                    <span>Free time</span>
+                                    <span>${freeTimePercentage.toFixed(1)}%</span>
+                                    <span>${formatDuration(freeTimeMs)} / </span>
                                 </div>
                                 <div class="progress-bar">
                                     <div class="progress-bar-fill" style="width: ${taskPercentage}%;"></div>
