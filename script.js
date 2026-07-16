@@ -1104,6 +1104,76 @@ function checkTimeScaleDone() {
     return SomethingChanged;
 }
 
+function RenderStatistics() {
+    const container = document.getElementById("root-statistics");
+    if (!container) return;
+
+    // Check if there is any history yet
+    if (!state.statistics || state.statistics.length === 0) {
+        container.innerHTML = `
+            <h3>Statistics History</h3>
+            <div style="text-align: center; color: #666; margin-top: 20px; padding: 20px; border: 1px dashed #ccc; border-radius: 8px;">
+                No statistics available yet. Complete a time scale to see your history.
+            </div>
+        `;
+        return;
+    }
+
+    // Clone and reverse the array so the most recent data is at the top
+    const sortedStats = [...state.statistics].reverse();
+
+    container.innerHTML = `
+        <h3>Statistics History</h3>
+        <div id="statistics-list-container">
+            ${sortedStats.map((stat) => {
+                const start = new Date(stat.start);
+                const end = new Date(start.getTime() + stat.duration * 24 * 60 * 60 * 1000);
+                const dateRange = `${start.toLocaleDateString('en-GB')} - ${end.toLocaleDateString('en-GB')}`;
+            
+                const totalProgress = stat.goal > 0 ? Math.min(100, (stat.timeWorked / stat.goal) * 100) : 100;
+
+                return `
+                    <div class="time-scale" style="margin-bottom: 20px; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <div class="time-scale-header" style="border-bottom: 1px solid #ddd; padding-bottom: 10px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: flex-end;">
+                            <div>
+                                <h3 style="margin: 0 0 5px 0;">${stat.name}</h3>
+                                <div style="font-size: 0.85em; color: #666;">
+                                    ${dateRange} <br>
+                                    (Duration: ${stat.duration} day${stat.duration > 1 ? 's' : ''})
+                                </div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-weight: bold; font-size: 1.1em; color: ${totalProgress >= 100 ? '#4CAF50' : '#333'};">${totalProgress.toFixed(1)}% Complete</div>
+                                <div style="font-size: 0.85em; color: #666;">
+                                    ${formatDuration(stat.timeWorked * 1000)} / ${formatDuration(stat.goal * 1000)}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="statistics-tasks">
+                            <h4 style="margin: 10px 0; font-size: 0.9em; color: #555;">Task Breakdown</h4>
+                            ${stat.tasks.map(task => {
+                                const taskProgress = task.goal > 0 ? Math.min(100, (task.elapsed / task.goal) * 100) : 0;
+                                return `
+                                    <div class="task-progress-row" style="margin-bottom: 12px;">
+                                        <div class="task-progress-meta" style="display: flex; justify-content: space-between; font-size: 0.85em; margin-bottom: 4px;">
+                                            <span style="font-weight: 500;">${task.name}</span>
+                                            <span>${formatDuration(task.elapsed * 1000)} / ${formatDuration(task.goal * 1000)} (${taskProgress.toFixed(1)}%)</span>
+                                        </div>
+                                        <div class="progress-bar" style="width: 100%; background-color: #e0e0e0; height: 6px; border-radius: 3px; overflow: hidden;">
+                                            <div class="progress-bar-fill" style="width: ${taskProgress}%; background-color: ${taskProgress >= 100 ? '#4CAF50' : '#2196F3'}; height: 100%;"></div>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join("")}
+                        </div>
+                    </div>
+                `;
+            }).join("")}
+        </div>
+    `;
+}
+
 function openHelp(){
     document.getElementById("modal-title").innerText = "How to use the tracker";
     document.getElementById("modal-body").innerHTML = `
