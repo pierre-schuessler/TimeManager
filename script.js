@@ -1162,7 +1162,7 @@ function RenderStatistics() {
                         <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">
                             <h4 style="margin: 0 0 10px 0; font-size: 0.9em; color: #555;">Task Breakdown</h4>
                             
-                            <div class="task-progress-list">
+                            <div class="task-progress-list" style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));">
                                 ${stat.tasks.map(task => {
                                     const taskProgress = task.goal > 0 ? Math.min(100, (task.elapsed / task.goal) * 100) : 0;
                                     return `
