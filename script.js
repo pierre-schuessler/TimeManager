@@ -1059,7 +1059,16 @@ function checkTimeScaleDone() {
                 goal: totals.goal,
                 duration: scale.duration,
                 start: scale.start,
+                tasks: state.tasks.map((task)=>{
+                    return {
+                        id: task.id,
+                        name: task.name,
+                        elapsed: task.times[scale.id].elapsed,
+                        goal: task.times[scale.id].goal,
+                    }
+                })
             });
+
             
             let newDate = new Date()
             newDate.setHours(0,0,0,0)
