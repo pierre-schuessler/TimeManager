@@ -1108,7 +1108,6 @@ function RenderStatistics() {
     const container = document.getElementById("root-statistics");
     if (!container) return;
 
-    // Check if there is any history yet
     if (!state.statistics || state.statistics.length === 0) {
         container.innerHTML = `
             <h3>Statistics History</h3>
@@ -1119,7 +1118,6 @@ function RenderStatistics() {
         return;
     }
 
-    // Clone and reverse the array so the most recent data is at the top
     const sortedStats = [...state.statistics].reverse();
 
     container.innerHTML = `
@@ -1130,38 +1128,49 @@ function RenderStatistics() {
                 const end = new Date(start.getTime() + stat.duration * 24 * 60 * 60 * 1000);
                 const dateRange = `${start.toLocaleDateString('en-GB')} - ${end.toLocaleDateString('en-GB')}`;
             
-                const totalProgress = stat.goal > 0 ? Math.min(100, (stat.timeWorked / stat.goal) * 100) : 100;
+                const cappedTotalWorked = stat.tasks.reduce((sum, task) => {
+                    return sum + Math.min(Number(task.elapsed) || 0, Number(task.goal) || 0);
+                }, 0);
+
+                const totalProgress = stat.goal > 0 ? Math.min(100, (cappedTotalWorked / stat.goal) * 100) : 100;
 
                 return `
-                    <div class="time-scale" style="margin-bottom: 20px; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                        <div class="time-scale-header" style="border-bottom: 1px solid #ddd; padding-bottom: 10px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: flex-end;">
-                            <div>
-                                <h3 style="margin: 0 0 5px 0;">${stat.name}</h3>
-                                <div style="font-size: 0.85em; color: #666;">
-                                    ${dateRange} <br>
-                                    (Duration: ${stat.duration} day${stat.duration > 1 ? 's' : ''})
-                                </div>
-                            </div>
-                            <div style="text-align: right;">
-                                <div style="font-weight: bold; font-size: 1.1em; color: ${totalProgress >= 100 ? '#4CAF50' : '#333'};">${totalProgress.toFixed(1)}% Complete</div>
-                                <div style="font-size: 0.85em; color: #666;">
-                                    ${formatDuration(stat.timeWorked * 1000)} / ${formatDuration(stat.goal * 1000)}
-                                </div>
+                    <div class="time-scale" style="margin-bottom: 20px; opacity: 0.9;">
+                        <div class="time-scale-header">
+                            <h3>${stat.name}</h3>
+                            <div style="font-size: 0.85em; color: #666; text-align: right;">
+                                ${dateRange} <br>
+                                (Duration: ${stat.duration} day${stat.duration > 1 ? 's' : ''})
                             </div>
                         </div>
                         
-                        <div class="statistics-tasks">
-                            <h4 style="margin: 10px 0; font-size: 0.9em; color: #555;">Task Breakdown</h4>
+                        <div class="time-scale-progress-section" style="margin-top: 10px;">
+                            <div class="time-scale-progress-block">
+                                <div class="time-scale-progress-meta">
+                                    <span>Total Completion</span>
+                                    <span>${totalProgress.toFixed(1)}%</span>
+                                    <span>${formatDuration(cappedTotalWorked * 1000)} / ${formatDuration(stat.goal * 1000)}</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-bar-fill" style="width: ${totalProgress}%;"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="task-progress-list" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">
+                            <h4 style="margin: 0 0 10px 0; font-size: 0.9em; color: #555;">Task Breakdown</h4>
                             ${stat.tasks.map(task => {
+                                // We leave the individual breakdown uncapped so you can still see if you went over!
                                 const taskProgress = task.goal > 0 ? Math.min(100, (task.elapsed / task.goal) * 100) : 0;
                                 return `
-                                    <div class="task-progress-row" style="margin-bottom: 12px;">
-                                        <div class="task-progress-meta" style="display: flex; justify-content: space-between; font-size: 0.85em; margin-bottom: 4px;">
-                                            <span style="font-weight: 500;">${task.name}</span>
-                                            <span>${formatDuration(task.elapsed * 1000)} / ${formatDuration(task.goal * 1000)} (${taskProgress.toFixed(1)}%)</span>
+                                    <div class="task-progress-row">
+                                        <div class="task-progress-meta">
+                                            <span>${task.name}</span>
+                                            <span>${taskProgress.toFixed(1)}%</span>
+                                            <span>${formatDuration(task.elapsed * 1000)} / ${formatDuration(task.goal * 1000)}</span>
                                         </div>
-                                        <div class="progress-bar" style="width: 100%; background-color: #e0e0e0; height: 6px; border-radius: 3px; overflow: hidden;">
-                                            <div class="progress-bar-fill" style="width: ${taskProgress}%; background-color: ${taskProgress >= 100 ? '#4CAF50' : '#2196F3'}; height: 100%;"></div>
+                                        <div class="progress-bar task-progress-bar">
+                                            <div class="progress-bar-fill" style="width: ${taskProgress}%;"></div>
                                         </div>
                                     </div>
                                 `;
