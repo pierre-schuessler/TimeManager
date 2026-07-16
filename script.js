@@ -788,7 +788,6 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
     });
 }
 let timeScalesRenderInterval = setInterval(()=>{
-    if (!isEditingAgenda) RenderTimeScales()
     UpdateTimeScalesRender()
 }, 1000);
 
