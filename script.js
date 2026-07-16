@@ -1153,7 +1153,7 @@ function RenderStatistics() {
                                     <span>${totalProgress.toFixed(1)}%</span>
                                     <span>${formatDuration(cappedTotalWorked * 1000)} / ${formatDuration(stat.goal * 1000)}</span>
                                 </div>
-                                <div class="progress-bar">
+                                <div class="progress-bar" ${totalProgress == 100 ? "" : "style='background-color: red'"}>
                                     <div class="progress-bar-fill" style="width: ${totalProgress}%;"></div>
                                 </div>
                             </div>
