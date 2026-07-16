@@ -826,7 +826,7 @@ function resetTimes(){
 const getCellBgStyles = (busy, totalSecondsWorked, isToday) => {
         const hasWork = totalSecondsWorked > 0;
         const percent = hasWork ? Math.min(1, totalSecondsWorked / 900) : 0;
-        const greenColor = `rgba(76, 255, 80, ${Math.max(0.2, percent)})`;
+        const greenColor = `rgba(76, 255, 80, ${(percent * 0.8) + 0.2})`;
         let styles = {};
 
         if (busy && hasWork) {
