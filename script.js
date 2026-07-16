@@ -1108,9 +1108,10 @@ function RenderStatistics() {
     const container = document.getElementById("root-statistics");
     if (!container) return;
 
+   
     if (!state.statistics || state.statistics.length === 0) {
         container.innerHTML = `
-            <h3>Statistics History</h3>
+            <h3>Statistics</h3>
             <div style="text-align: center; color: #666; margin-top: 20px; padding: 20px; border: 1px dashed #ccc; border-radius: 8px;">
                 No statistics available yet. Complete a time scale to see your history.
             </div>
@@ -1118,10 +1119,11 @@ function RenderStatistics() {
         return;
     }
 
+    
     const sortedStats = [...state.statistics].reverse();
 
     container.innerHTML = `
-        <h3>Statistics History</h3>
+        <h3>Statistics</h3>
         <div id="statistics-list-container">
             ${sortedStats.map((stat) => {
                 const start = new Date(stat.start);
@@ -1157,24 +1159,26 @@ function RenderStatistics() {
                             </div>
                         </div>
 
-                        <div class="task-progress-list" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">
+                        <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">
                             <h4 style="margin: 0 0 10px 0; font-size: 0.9em; color: #555;">Task Breakdown</h4>
-                            ${stat.tasks.map(task => {
-                                // We leave the individual breakdown uncapped so you can still see if you went over!
-                                const taskProgress = task.goal > 0 ? Math.min(100, (task.elapsed / task.goal) * 100) : 0;
-                                return `
-                                    <div class="task-progress-row">
-                                        <div class="task-progress-meta">
-                                            <span>${task.name}</span>
-                                            <span>${taskProgress.toFixed(1)}%</span>
-                                            <span>${formatDuration(task.elapsed * 1000)} / ${formatDuration(task.goal * 1000)}</span>
+                            
+                            <div class="task-progress-list">
+                                ${stat.tasks.map(task => {
+                                    const taskProgress = task.goal > 0 ? Math.min(100, (task.elapsed / task.goal) * 100) : 0;
+                                    return `
+                                        <div class="task-progress-row">
+                                            <div class="task-progress-meta">
+                                                <span>${task.name}</span>
+                                                <span>${taskProgress.toFixed(1)}%</span>
+                                                <span>${formatDuration(task.elapsed * 1000)} / ${formatDuration(task.goal * 1000)}</span>
+                                            </div>
+                                            <div class="progress-bar task-progress-bar">
+                                                <div class="progress-bar-fill" style="width: ${taskProgress}%;"></div>
+                                            </div>
                                         </div>
-                                        <div class="progress-bar task-progress-bar">
-                                            <div class="progress-bar-fill" style="width: ${taskProgress}%;"></div>
-                                        </div>
-                                    </div>
-                                `;
-                            }).join("")}
+                                    `;
+                                }).join("")}
+                            </div>
                         </div>
                     </div>
                 `;
@@ -1182,7 +1186,6 @@ function RenderStatistics() {
         </div>
     `;
 }
-
 function openHelp(){
     document.getElementById("modal-title").innerText = "How to use the tracker";
     document.getElementById("modal-body").innerHTML = `
