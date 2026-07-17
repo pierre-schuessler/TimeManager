@@ -681,7 +681,7 @@ function RenderTimeScales(agendaData = state.agenda) {
                         <div>Duration: ${scale.duration} day${scale.duration !== 1 ? "s" : ""}</div>
                         <div>
                             <div>Start: ${new Date(scale.start).toLocaleDateString('en-GB')}</div>
-                            <div>End: ${new Date(new Date(scale.start).getTime() + scale.duration * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB')}</div>
+                            <div>End: ${new Date(new Date(scale.start).getTime() + (scale.duration-1) * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB')}</div>
                         </div>
                         <div class="time-scale-progress-section">
                             <div class="time-scale-progress-block">
@@ -1177,7 +1177,7 @@ function RenderStatistics() {
         <div id="statistics-list-container">
             ${sortedStats.map((stat) => {
                 const start = new Date(stat.start);
-                const end = new Date(start.getTime() + stat.duration * 24 * 60 * 60 * 1000);
+                const end = new Date(start.getTime() + (stat.duration-1) * 24 * 60 * 60 * 1000);
                 const dateRange = `${start.toLocaleDateString('en-GB')} - ${end.toLocaleDateString('en-GB')}`;
             
                 const cappedTotalWorked = stat.tasks.reduce((sum, task) => {
