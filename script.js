@@ -680,8 +680,12 @@ function RenderTimeScales(agendaData = state.agenda) {
                         </div>
                         <div>Duration: ${scale.duration} day${scale.duration !== 1 ? "s" : ""}</div>
                         <div>
-                            <div>Start: ${new Date(scale.start).toLocaleDateString('en-GB')}</div>
-                            <div>End: ${new Date(new Date(scale.start).getTime() + (scale.duration-1) * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB')}</div>
+                            ${
+                                scale.duration != 1 ? `<div>Start: ${new Date(scale.start).toLocaleDateString('en-GB')}</div>
+                                    <div>End: ${new Date(new Date(scale.start).getTime() + (scale.duration-1) * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB')}</div>`
+                                    : `<div>${new Date(scale.start).toLocaleDateString('en-GB')}</div>`
+                            }
+                            
                         </div>
                         <div class="time-scale-progress-section">
                             <div class="time-scale-progress-block">
@@ -1200,7 +1204,7 @@ function RenderStatistics() {
                                 <div class="time-scale-progress-meta">
                                     <span>Total Completion</span>
                                     <span>${totalProgress.toFixed(1)}%</span>
-                                    <span>${formatDuration(cappedTotalWorked * 1000)} / ${formatDuration(stat.goal * 1000)}</span>
+                                    <span>${formatDuration(cappedTotalWorked * 1000)}${stat.duration == 1 ? "" : `/ ${formatDuration(stat.goal * 1000)}` }</span>
                                 </div>
                                 <div class="progress-bar" style="background-color: red">
                                     <div class="progress-bar-fill" style="width: ${totalProgress}%;"></div>
