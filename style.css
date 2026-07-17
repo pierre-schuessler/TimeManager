@@ -439,6 +439,7 @@ textarea {
 }
 
 .progress-bar-fill {
+    transition: width 1s linear;
     height: 100%;
     background-color: var(--primary);
 }

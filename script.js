@@ -1188,7 +1188,7 @@ function RenderStatistics() {
                                     <span>${totalProgress.toFixed(1)}%</span>
                                     <span>${formatDuration(cappedTotalWorked * 1000)} / ${formatDuration(stat.goal * 1000)}</span>
                                 </div>
-                                <div class="progress-bar" ${totalProgress == 100 ? "" : "style='background-color: red'"}>
+                                <div class="progress-bar" style="background-color: red">
                                     <div class="progress-bar-fill" style="width: ${totalProgress}%;"></div>
                                 </div>
                             </div>
@@ -1207,7 +1207,7 @@ function RenderStatistics() {
                                                 <span>${taskProgress.toFixed(1)}%</span>
                                                 <span>${formatDuration(task.elapsed * 1000)} / ${formatDuration(task.goal * 1000)}</span>
                                             </div>
-                                            <div class="progress-bar task-progress-bar" ${taskProgress == 100 ? "" : "style='background-color: red'"}>
+                                            <div class="progress-bar task-progress-bar" style="background-color: red">
                                                 <div class="progress-bar-fill" style="width: ${taskProgress}%;"></div>
                                             </div>
                                         </div>
