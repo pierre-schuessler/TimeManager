@@ -1182,8 +1182,7 @@ function RenderStatistics() {
             ${sortedStats.map((stat) => {
                 const start = new Date(stat.start);
                 let end = new Date(start.getTime() + (stat.duration-1) * 24 * 60 * 60 * 1000);
-                if (stat.duration == 1) end = "";
-                const dateRange = `${start.toLocaleDateString('en-GB')} - ${end.toLocaleDateString('en-GB')}`;
+                const dateRange = `${start.toLocaleDateString('en-GB')}${stat.duration == 1 ? "" : `- ${end.toLocaleDateString('en-GB')}`}`;
             
                 const cappedTotalWorked = stat.tasks.reduce((sum, task) => {
                     return sum + Math.min(Number(task.elapsed) || 0, Number(task.goal) || 0);
