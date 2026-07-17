@@ -432,6 +432,8 @@ function deleteSubtask(taskId, subtaskIndex) {
 
 function RenderTasks() {
     const container = document.getElementById("root-tasks");
+    let firstRender = false;
+    if (container.innerHTML == '') firstRender = true;
     container.innerHTML = `
         <h3>To-do List</h3>
         <div id="task-list-container">
@@ -462,9 +464,10 @@ function RenderTasks() {
                                 </div>
                                 <div class="task-progress-list">
                                     ${state.timeScales.map((scale)=>{
-                                        const progress = task.times[scale.id].goal > 0
+                                        const progress = task.times[scale.id].goal > 0 && !firstRender
                                             ? Math.min(100, (task.times[scale.id].elapsed / task.times[scale.id].goal) * 100)
                                             : 0;
+                                        if (firstRender) console.log(progress)
                                         return `
                                             <div class="task-progress-row">
                                                 <div class="task-progress-meta">
@@ -486,6 +489,13 @@ function RenderTasks() {
             }
         </div>
     `
+    if (firstRender){
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                UpdateTasksRender();
+            });
+        });
+    }
 }
 
 function UpdateTasksRender() {
@@ -710,7 +720,11 @@ function RenderTimeScales(agendaData = state.agenda) {
             }).join("")}
         </div>
     `
-    UpdateTimeScalesRender(agendaData)
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            UpdateTimeScalesRender(agendaData);
+        });
+    });
 }
 
 function UpdateTimeScalesRender(agendaData = state.agenda) {
