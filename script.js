@@ -683,7 +683,7 @@ function RenderTimeScales(agendaData = state.agenda) {
                             ${
                                 scale.duration != 1 ? `<div>Start: ${new Date(scale.start).toLocaleDateString('en-GB')}</div>
                                     <div>End: ${new Date(new Date(scale.start).getTime() + (scale.duration-1) * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB')}</div>`
-                                    : `<div>${new Date(scale.start).toLocaleDateString('en-GB')}</div>`
+                                    : `<div>Date: ${new Date(scale.start).toLocaleDateString('en-GB')}</div>`
                             }
                             
                         </div>
@@ -1181,7 +1181,8 @@ function RenderStatistics() {
         <div id="statistics-list-container">
             ${sortedStats.map((stat) => {
                 const start = new Date(stat.start);
-                const end = new Date(start.getTime() + (stat.duration-1) * 24 * 60 * 60 * 1000);
+                let end = new Date(start.getTime() + (stat.duration-1) * 24 * 60 * 60 * 1000);
+                if (stat.duration == 1) end = "";
                 const dateRange = `${start.toLocaleDateString('en-GB')} - ${end.toLocaleDateString('en-GB')}`;
             
                 const cappedTotalWorked = stat.tasks.reduce((sum, task) => {
@@ -1204,7 +1205,7 @@ function RenderStatistics() {
                                 <div class="time-scale-progress-meta">
                                     <span>Total Completion</span>
                                     <span>${totalProgress.toFixed(1)}%</span>
-                                    <span>${formatDuration(cappedTotalWorked * 1000)}${stat.duration == 1 ? "" : `/ ${formatDuration(stat.goal * 1000)}` }</span>
+                                    <span>${formatDuration(cappedTotalWorked * 1000)} / ${formatDuration(stat.goal * 1000)}</span>
                                 </div>
                                 <div class="progress-bar" style="background-color: red">
                                     <div class="progress-bar-fill" style="width: ${totalProgress}%;"></div>
