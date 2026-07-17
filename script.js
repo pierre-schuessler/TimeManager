@@ -159,7 +159,7 @@ function toggleTask(id, UITarget) {
     
     if (task.running) {
         task.running = false;
-        RenderTasks();
+        UpdateTasksRender();
     } else {
         state.tasks.forEach((task) => {
             task.running = false;
@@ -169,10 +169,9 @@ function toggleTask(id, UITarget) {
         startCounters = JSON.parse(JSON.stringify(task.times));
         lastTime = new Date().getTime();
 
-        RenderTasks();
-        RenderTimeScales();
+        UpdateTasksRender();
+        UpdateTimeScalesRender();
 
-        
         timerWorker.onmessage = function(e) {
             if (e.data === 'tick') {
                 let now = new Date().getTime();
@@ -273,7 +272,7 @@ function toggleTask(id, UITarget) {
                     ding(3);
                 }
 
-                RenderTasks();
+                UpdateTasksRender();
                 Save();
             }
         };
@@ -487,6 +486,42 @@ function RenderTasks() {
             }
         </div>
     `
+}
+
+function UpdateTasksRender() {
+    const taskContainers = document.querySelectorAll("#task-list-container > .task:not([onclick='createNewTask()'])");
+    
+    taskContainers.forEach((taskContainer, index) => {
+        let task = state.tasks[index];
+        if (!task) return;
+
+        if (task.running) {
+            taskContainer.classList.add("active");
+        } else {
+            taskContainer.classList.remove("active");
+        }
+
+        let progressRows = taskContainer.querySelectorAll(".task-progress-row");
+        progressRows.forEach((row, scaleIndex) => {
+            let scale = state.timeScales[scaleIndex];
+            if (!scale) return;
+
+            const progress = task.times[scale.id].goal > 0
+                ? Math.min(100, (task.times[scale.id].elapsed / task.times[scale.id].goal) * 100)
+                : 0;
+
+            let metaSpans = row.querySelectorAll(".task-progress-meta span");
+            if (metaSpans.length >= 3) {
+                metaSpans[1].textContent = `${progress.toFixed(1)}%`;
+                metaSpans[2].textContent = `${new Date(task.times[scale.id].elapsed * 1000).toISOString().substring(11, 19)} / ${new Date(task.times[scale.id].goal * 1000).toISOString().substring(11, 19)}`;
+            }
+
+            let progressBarFill = row.querySelector(".progress-bar-fill");
+            if (progressBarFill) {
+                progressBarFill.style.width = `${progress}%`;
+            }
+        });
+    });
 }
 
 function addTimeScale() {
@@ -983,7 +1018,7 @@ function buildAgendaSelector() {
             currentHoverData = startCellData;
             
             updatePreview(startCellData, currentHoverData);
-            RenderTimeScales(getPreviewAgenda(startCellData, currentHoverData));
+            UpdateTimeScalesRender(getPreviewAgenda(startCellData, currentHoverData));
             isEditingAgenda = true;
         }
     });
@@ -993,7 +1028,7 @@ function buildAgendaSelector() {
             currentHoverData = getDataFromCell(event.target);
             
             updatePreview(startCellData, currentHoverData);
-            RenderTimeScales(getPreviewAgenda(startCellData, currentHoverData));
+            UpdateTimeScalesRender(getPreviewAgenda(startCellData, currentHoverData));
         }
     });
 
@@ -1029,8 +1064,8 @@ function buildAgendaSelector() {
             isEditingAgenda = false;
             
             Save();
-            RenderTimeScales();
-            RenderAgenda();
+            UpdateTimeScalesRender();
+            updatePreview();
         }
     };
 
@@ -1099,6 +1134,7 @@ function checkTimeScaleDone() {
         RenderTasks();
         RenderTimeScales()
         RenderAgenda()
+        RenderStatistics();
     }
 
     return SomethingChanged;
@@ -1139,10 +1175,9 @@ function RenderStatistics() {
                 return `
                     <div class="time-scale" style="margin-bottom: 20px; opacity: 0.9;">
                         <div class="time-scale-header">
-                            <h3>${stat.name}</h3>
+                            <h3>${stat.name} [${dateRange}]</h3>
                             <div style="font-size: 0.85em; color: #666; text-align: right;">
-                                ${dateRange} <br>
-                                (Duration: ${stat.duration} day${stat.duration > 1 ? 's' : ''})
+                                (${stat.duration} day${stat.duration > 1 ? 's' : ''})
                             </div>
                         </div>
                         
