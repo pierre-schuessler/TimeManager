@@ -464,7 +464,8 @@ function RenderTasks() {
                                 </div>
                                 <div class="task-progress-list">
                                     ${state.timeScales.map((scale)=>{
-                                        const progress = task.times[scale.id].goal > 0 && !firstRender
+                                        if (task.times[scale.id].goal <= 0) return "";
+                                        const progress = !firstRender
                                             ? Math.min(100, (task.times[scale.id].elapsed / task.times[scale.id].goal) * 100)
                                             : 0;
                                         if (firstRender) console.log(progress)
@@ -1217,6 +1218,7 @@ function RenderStatistics() {
                             
                             <div class="task-progress-list" style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));">
                                 ${stat.tasks.map(task => {
+                                    if (task.goal <= 0) return "";
                                     const taskProgress = task.goal > 0 ? Math.min(100, (task.elapsed / task.goal) * 100) : 0;
                                     return `
                                         <div class="task-progress-row">
