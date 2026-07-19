@@ -61,8 +61,10 @@ header > *{
 
 main {
     display: grid;
-    grid-template-areas: "tasks agenda"
-                          "time-scale statistics";
+    grid-template-areas:
+        "tasks time-scale"
+        "tasks statistics"
+        "agenda statistics";
     grid-template-columns: 1fr 1fr;
     gap: var(--spacing-xl);
     margin : var(--spacing-xl) 0px;
