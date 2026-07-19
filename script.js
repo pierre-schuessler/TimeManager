@@ -708,7 +708,7 @@ function RenderTimeScales(agendaData = state.agenda) {
                             
                             <div class="streak-badge ${streakClass}" style="margin-right: auto; transform: scale(0.75); transform-origin: left center;">
                                 <svg class="flame-icon" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M12 24C12 24 2 16 2 9C2 4 7 0 12 0C12 0 10 4 13 8C13 8 19 5 21 10C24 16 16 24 12 24Z" />
+                                    <path d="M12 24C17.5228 24 22 19.5228 22 14C22 8 15 2 13 0C13 0 13.5 3 12 5C10.5 7 2 9 2 15C2 19.9706 6.47715 24 12 24Z"/>
                                 </svg>
                                 <span class="streak-number">${streakCount}</span>
                             </div>
