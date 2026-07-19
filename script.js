@@ -660,6 +660,31 @@ function formatDuration(ms) {
     return output;
 }
 
+function getTimeScaleStreak(scaleId) {
+    const scaleStats = state.statistics
+        .filter(stat => stat.scaleId === scaleId)
+        .reverse();
+
+    let streakInDays = 0;
+
+    for (const stat of scaleStats) {
+        const cappedTotalWorked = stat.tasks.reduce((sum, task) => {
+            return sum + Math.min(Number(task.elapsed) || 0, Number(task.goal) || 0);
+        }, 0);
+
+        const isCompleted = stat.goal === 0 || cappedTotalWorked >= stat.goal;
+
+        if (isCompleted) {
+            streakInDays += stat.duration;
+        } else {
+            break; 
+        }
+    }
+
+    return streakInDays;
+}
+
+
 let isEditingAgenda = false;
 
 function RenderTimeScales(agendaData = state.agenda) {
@@ -673,11 +698,22 @@ function RenderTimeScales(agendaData = state.agenda) {
         <div id="time-scale-list-container">
             <div class="time-scale" style="text-align: center; cursor: pointer;" onclick="addTimeScale()">+ New Time Scale</div>
             ${state.timeScales.map((scale)=>{
+                const streakCount = getTimeScaleStreak(scale.id);
+                const streakClass = streakCount > 0 ? "active" : "inactive";
+
                 return `
                     <div class="time-scale">
-                        <div class="time-scale-header">
-                            <h3>${scale.name}</h3>
-                            <div onclick="editTimeScale('${scale.id}')" class="edit-icon">⚙</div>
+                        <div class="time-scale-header" style="display: flex; align-items: center; gap: 8px;">
+                            <h3 style="margin: 0;">${scale.name}</h3>
+                            
+                            <div class="streak-badge ${streakClass}" style="margin-right: auto; transform: scale(0.75); transform-origin: left center;">
+                                <svg class="flame-icon" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M12 24C12 24 2 16 2 9C2 4 7 0 12 0C12 0 10 4 13 8C13 8 19 5 21 10C24 16 16 24 12 24Z" />
+                                </svg>
+                                <span class="streak-number">${streakCount}</span>
+                            </div>
+                            
+                            <div onclick="editTimeScale('${scale.id}')" class="edit-icon" style="cursor: pointer;">⚙</div>
                         </div>
                         <div>Duration: ${scale.duration} day${scale.duration !== 1 ? "s" : ""}</div>
                         <div>
