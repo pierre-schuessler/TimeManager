@@ -517,10 +517,10 @@ table > * {
 
 
 .streak-badge.inactive .flame-icon {
-    color: #e5e5e5;
+    color: #ababab;
 }
 
 .streak-badge.inactive .streak-number {
-    color: #afafaf;
+    color: #494949;
     text-shadow: none;
 }
