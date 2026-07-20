@@ -769,6 +769,7 @@ function RenderTimeScales(agendaData = state.agenda) {
 }
 
 function UpdateTimeScalesRender(agendaData = state.agenda) {
+    checkTimeScaleDone()
     let timeScaleContainers = document.querySelectorAll(".time-scale");
     
     timeScaleContainers.forEach((timeScaleContainer) => {
