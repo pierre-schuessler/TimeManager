@@ -97,10 +97,10 @@ function processDingQueue() {
         setTimeout(() => {
             const audio = new Audio('ding.mp3');
             audio.play();
-        }, i * 500);
+        }, i * 300);
     }
     
-    setTimeout(processDingQueue, (n * 500) + 800);
+    setTimeout(processDingQueue, (n * 300) + 1500);
 }
 
 function ding(n){
