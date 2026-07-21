@@ -466,7 +466,7 @@ function RenderTasks() {
                                     ${state.timeScales.map((scale)=>{
                                         if (task.times[scale.id].goal <= 0) return "";
                                         const progress = !firstRender
-                                            ? Math.min(100, (task.times[scale.id].elapsed / task.times[scale.id].goal) * 100)
+                                            ? (task.times[scale.id].elapsed / task.times[scale.id].goal) * 100
                                             : 0;
                                         if (firstRender) console.log(progress)
                                         return `
@@ -477,7 +477,7 @@ function RenderTasks() {
                                                     <span>${new Date(task.times[scale.id].elapsed * 1000).toISOString().substring(11, 19)} / ${new Date(task.times[scale.id].goal * 1000).toISOString().substring(11, 19)}</span>
                                                 </div>
                                                 <div class="progress-bar task-progress-bar">
-                                                    <div class="progress-bar-fill" style="width: ${progress}%;"></div>
+                                                    <div class="progress-bar-fill" style="width: ${Math.min(progress)}%;"></div>
                                                 </div>
                                             </div>
                                         `
@@ -518,7 +518,7 @@ function UpdateTasksRender() {
             if (!scale) return;
 
             const progress = task.times[scale.id].goal > 0
-                ? Math.min(100, (task.times[scale.id].elapsed / task.times[scale.id].goal) * 100)
+                ? (task.times[scale.id].elapsed / task.times[scale.id].goal) * 100
                 : 0;
 
             let metaSpans = row.querySelectorAll(".task-progress-meta span");
@@ -529,7 +529,7 @@ function UpdateTasksRender() {
 
             let progressBarFill = row.querySelector(".progress-bar-fill");
             if (progressBarFill) {
-                progressBarFill.style.width = `${progress}%`;
+                progressBarFill.style.width = `${Math.min(100, progress)}%`;
             }
         });
     });
@@ -788,7 +788,7 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
         }, { elapsed: 0, goal: 0 });
 
         const taskPercentage = totals.goal > 0
-            ? Math.min(100, (totals.elapsed / totals.goal) * 100)
+            ? (totals.elapsed / totals.goal) * 100
             : 100;
 
         const currentTime = Date.now();
@@ -825,11 +825,11 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
         const freeTimeUsedMs = Math.max(0, initialFreeTimeMs - (timeRemaining - taskRemainingMs));
 
         const freeTimeUsedPercentage = (initialFreeTimeMs > 0)
-            ? Math.max(0, Math.min(100, (freeTimeUsedMs / initialFreeTimeMs) * 100))
+            ? Math.max(0,  (freeTimeUsedMs / initialFreeTimeMs) * 100)
             : (freeTimeUsedMs > 0 ? 100 : 0); 
 
         const timePercentage = (totalTimeMs > 0 && !isNaN(timeUsed))
-            ? Math.max(0, Math.min(100, (timeUsed / totalTimeMs) * 100))
+            ? Math.max(0, (timeUsed / totalTimeMs) * 100)
             : 0;
 
         if (taskRemainingMs > 0 && (timeRemaining - taskRemainingMs) <= 5 * 60 * 1000  && taskPercentage < 100)  { 
@@ -862,17 +862,17 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
                 case "Tasks":
                     meta_info.children[1].textContent = `${taskPercentage.toFixed(1)}%`;
                     meta_info.children[2].textContent = `${new Date(totals.elapsed * 1000).toISOString().substring(11, 19)} / ${new Date(totals.goal * 1000).toISOString().substring(11, 19)}`;
-                    progressBarFill.style.width = `${taskPercentage}%`;
+                    progressBarFill.style.width = `${Math.min(100, taskPercentage)}%`;
                     break;
                 case "Free time used":
                     meta_info.children[1].textContent = `${freeTimeUsedPercentage.toFixed(1)}%`;
                     meta_info.children[2].textContent = `${formatDuration(freeTimeUsedMs)} / ${formatDuration(initialFreeTimeMs)}`;
-                    progressBarFill.style.width = `${freeTimeUsedPercentage}%`;
+                    progressBarFill.style.width = `${Math.min(100, freeTimeUsedPercentage)}%`;
                     break;
                 case "Time":
                     meta_info.children[1].textContent = `${timePercentage.toFixed(1)}%`;
                     meta_info.children[2].textContent = `${formatDuration(timeUsed)} / ${formatDuration(totalTimeMs)}`;
-                    progressBarFill.style.width = `${timePercentage}%`;
+                    progressBarFill.style.width = `${Math.min(100, timePercentage)}%`;
                     break;
             }
         });
@@ -1226,7 +1226,7 @@ function RenderStatistics() {
                     return sum + Math.min(Number(task.elapsed) || 0, Number(task.goal) || 0);
                 }, 0);
 
-                const totalProgress = stat.goal > 0 ? Math.min(100, (cappedTotalWorked / stat.goal) * 100) : 100;
+                const totalProgress = stat.goal > 0 ? (cappedTotalWorked / stat.goal) * 100 : 100;
 
                 return `
                     <div class="time-scale" style="margin-bottom: 20px; opacity: 0.9;">
@@ -1245,7 +1245,7 @@ function RenderStatistics() {
                                     <span>${formatDuration(cappedTotalWorked * 1000)} / ${formatDuration(stat.goal * 1000)}</span>
                                 </div>
                                 <div class="progress-bar" style="background-color: red">
-                                    <div class="progress-bar-fill" style="width: ${totalProgress}%;"></div>
+                                    <div class="progress-bar-fill" style="width: ${Math.min(100, totalProgress)}%;"></div>
                                 </div>
                             </div>
                         </div>
@@ -1256,7 +1256,7 @@ function RenderStatistics() {
                             <div class="task-progress-list" style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));">
                                 ${stat.tasks.map(task => {
                                     if (task.goal <= 0) return "";
-                                    const taskProgress = task.goal > 0 ? Math.min(100, (task.elapsed / task.goal) * 100) : 0;
+                                    const taskProgress = task.goal > 0 ? (task.elapsed / task.goal) * 100 : 0;
                                     return `
                                         <div class="task-progress-row">
                                             <div class="task-progress-meta">
@@ -1265,7 +1265,7 @@ function RenderStatistics() {
                                                 <span>${formatDuration(task.elapsed * 1000)} / ${formatDuration(task.goal * 1000)}</span>
                                             </div>
                                             <div class="progress-bar task-progress-bar" style="background-color: red">
-                                                <div class="progress-bar-fill" style="width: ${taskProgress}%;"></div>
+                                                <div class="progress-bar-fill" style="width: ${Math.min(100, taskProgress)}%;"></div>
                                             </div>
                                         </div>
                                     `;
