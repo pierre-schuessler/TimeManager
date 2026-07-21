@@ -832,7 +832,7 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
             ? Math.max(0, Math.min(100, (timeUsed / totalTimeMs) * 100))
             : 0;
 
-        if (taskRemainingMs > 0 && (timeRemaining - taskRemainingMs) <= 5 * 60 * 1000) { 
+        if (taskRemainingMs > 0 && (timeRemaining - taskRemainingMs) <= 5 * 60 * 1000  && taskPercentage < 100)  { 
             if (!scale.hasRung) { 
                 console.log(`RING TRIGGERED for "${scale.name}". Time Remaining: ${timeRemaining/1000}s, Tasks Remaining: ${taskRemainingMs/1000}s.`);
                 ring();
