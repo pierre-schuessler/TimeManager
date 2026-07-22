@@ -767,70 +767,59 @@ function RenderTimeScales(agendaData = state.agenda) {
         });
     });
 }
+
 let hasRungToday = false;
 
-function getRequiredWorkTodayMs() {
-    const now = new Date();
-    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
+function getWorkableTimeBetween(startMs, endMs) {
+    if (endMs <= startMs) return 0;
+    const rawTimeMs = endMs - startMs;
     const slotDurationMs = 15 * 60 * 1000;
-    let requiredWorkTodayMs = 0;
-
-    state.timeScales.forEach(scale => {
-        const scaleEndMs = new Date(scale.start).getTime() + (scale.duration * 24 * 60 * 60 * 1000);
-
-        let totalRemainingWorkForScaleMs = 0;
-        state.tasks.forEach(task => {
-            const goalMs = (task.times[scale.id]?.goal || 0) * 1000;
-            const elapsedMs = (task.times[scale.id]?.elapsed || 0) * 1000;
-            totalRemainingWorkForScaleMs += Math.max(0, goalMs - elapsedMs);
-        });
-
-        if (totalRemainingWorkForScaleMs > 0) {
-            let futureWorkableTimeMs = 0;
-
-            if (scaleEndMs > endOfDay) {
-                const rawFutureTimeMs = scaleEndMs - endOfDay;
-                let futureBusyTimeMs = 0;
-
-                state.agenda.forEach(block => {
-                    if (block.busy) {
-                        const blockStartMs = new Date(block.iso).getTime();
-                        if (blockStartMs >= endOfDay && blockStartMs < scaleEndMs) {
-                            futureBusyTimeMs += slotDurationMs;
-                        }
-                    }
-                });
-
-                futureWorkableTimeMs = Math.max(0, rawFutureTimeMs - futureBusyTimeMs);
-            }
-
-            const scaleOverflowTodayMs = Math.max(0, totalRemainingWorkForScaleMs - futureWorkableTimeMs);
-
-            if (scaleOverflowTodayMs > requiredWorkTodayMs) {
-                requiredWorkTodayMs = scaleOverflowTodayMs;
-            }
-        }
-    });
-
-    return requiredWorkTodayMs;
-}
-
-function getTodayWorkableRemainingMs() {
-    const now = new Date();
-    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
-    const slotDurationMs = 15 * 60 * 1000;
-    let todayBusyRemainingMs = 0;
+    let busyTimeMs = 0;
 
     state.agenda.forEach(block => {
-        if (block.busy) {
+        if (block.busy && block.iso) {
             const blockStartMs = new Date(block.iso).getTime();
-            if (blockStartMs >= now.getTime() && blockStartMs < tomorrow) {
-                todayBusyRemainingMs += slotDurationMs;
+            if (blockStartMs >= startMs && blockStartMs < endMs) {
+                busyTimeMs += slotDurationMs;
             }
         }
     });
 
-    return Math.max(0, (tomorrow - now.getTime()) - todayBusyRemainingMs);
+    return Math.max(0, rawTimeMs - busyTimeMs);
+}
+
+function getRequiredWorkByDeadlineMs(targetEndMs) {
+    let totalRequiredMs = 0;
+
+    state.tasks.forEach(task => {
+        let maxTaskRequiredForDeadlineMs = 0;
+
+        state.timeScales.forEach(scale => {
+            const scaleEndMs = new Date(scale.start).getTime() + (scale.duration * 24 * 60 * 60 * 1000);
+            const goal = Number(task.times[scale.id]?.goal) || 0;
+            const elapsed = Number(task.times[scale.id]?.elapsed) || 0;
+            const remainingTaskMs = Math.max(0, (goal - elapsed) * 1000);
+
+            if (remainingTaskMs > 0) {
+                let requiredForTaskMs = 0;
+
+                if (scaleEndMs <= targetEndMs) {
+                    requiredForTaskMs = remainingTaskMs;
+                } else {
+                    const futureWorkableMs = getWorkableTimeBetween(targetEndMs, scaleEndMs);
+                    requiredForTaskMs = Math.max(0, remainingTaskMs - futureWorkableMs);
+                }
+
+                if (requiredForTaskMs > maxTaskRequiredForDeadlineMs) {
+                    maxTaskRequiredForDeadlineMs = requiredForTaskMs;
+                }
+            }
+        });
+
+        totalRequiredMs += maxTaskRequiredForDeadlineMs;
+    });
+
+    return totalRequiredMs;
 }
 
 function UpdateTimeScalesRender(agendaData = state.agenda) {
@@ -838,14 +827,16 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
 
     let timeScaleContainers = document.querySelectorAll(".time-scale");
 
-    const requiredWorkTodayMs = getRequiredWorkTodayMs();
-    const todayWorkableRemainingMs = getTodayWorkableRemainingMs();
+    const now = new Date();
+    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
+
+    const requiredWorkTodayMs = getRequiredWorkByDeadlineMs(endOfDay);
+    const todayWorkableRemainingMs = getWorkableTimeBetween(now.getTime(), endOfDay);
     const wiggleRoomTodayMs = todayWorkableRemainingMs - requiredWorkTodayMs;
 
     if (requiredWorkTodayMs > 0) {
         if (wiggleRoomTodayMs >= 0 && wiggleRoomTodayMs <= 5 * 60 * 1000) {
             if (!hasRungToday) {
-                console.log(`RING TRIGGERED. Required today: ${requiredWorkTodayMs / 1000}s, workable time left: ${todayWorkableRemainingMs / 1000}s.`);
                 ring();
 
                 document.getElementById("modal-title").innerText = "Time Alert";
@@ -912,28 +903,13 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
         const rawTimeUsed = currentTime - startTimeMs;
         const timeUsed = rawTimeUsed - passedExcludedTimeMs;
 
-        const taskRemainingMs = Math.max(0, (totals.goal - totals.elapsed) * 1000);
+        const workableRemainingMs = getWorkableTimeBetween(currentTime, scaleEndMs);
 
-        const initialFreeTimeMs = Math.max(0, totalTimeMs - (totals.goal * 1000));
+        const totalTaskRequiredForDeadlineMs = getRequiredWorkByDeadlineMs(scaleEndMs);
 
-        let remainingBusyMs = 0;
+        const currentFreeTimeMs = workableRemainingMs - totalTaskRequiredForDeadlineMs;
 
-        agendaData.forEach(block => {
-            if (!block.iso || !block.busy) return;
-
-            const blockStartMs = new Date(block.iso).getTime();
-
-            if (blockStartMs >= currentTime && blockStartMs < scaleEndMs) {
-                remainingBusyMs += slotDurationMs;
-            }
-        });
-
-        const workableRemainingMs = Math.max(
-            0,
-            (scaleEndMs - currentTime) - remainingBusyMs
-        );
-
-        const currentFreeTimeMs = workableRemainingMs - taskRemainingMs;
+        const initialFreeTimeMs = Math.max(0, totalTimeMs - totalTaskRequiredForDeadlineMs);
 
         const freeTimeUsedMs = Math.max(
             0,
