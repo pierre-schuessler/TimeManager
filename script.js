@@ -474,10 +474,10 @@ function RenderTasks() {
                                                 <div class="task-progress-meta">
                                                     <span>${scale.name}</span>
                                                     <span>${progress.toFixed(1)}%</span>
-                                                    <span>${new Date(task.times[scale.id].elapsed * 1000).toISOString().substring(11, 19)} / ${new Date(task.times[scale.id].goal * 1000).toISOString().substring(11, 19)}</span>
+                                                    <span>${new Date(task.times[scale.id].elapsed * 1000).toISOString().substring(11, 19)} / ${new Date(task.times[scale.id].goal * 1000).toISOString().substring(11, 19)} (${new Date(Math.max(0, task.times[scale.id].goal - task.times[scale.id].elapsed) * 1000).toISOString().substring(11, 19)} left)</span>
                                                 </div>
                                                 <div class="progress-bar task-progress-bar">
-                                                    <div class="progress-bar-fill" style="width: ${Math.min(progress)}%;"></div>
+                                                    <div class="progress-bar-fill" style="width: ${Math.min(progress, 100)}%;"></div>
                                                 </div>
                                             </div>
                                         `
@@ -524,7 +524,7 @@ function UpdateTasksRender() {
             let metaSpans = row.querySelectorAll(".task-progress-meta span");
             if (metaSpans.length >= 3) {
                 metaSpans[1].textContent = `${progress.toFixed(1)}%`;
-                metaSpans[2].textContent = `${new Date(task.times[scale.id].elapsed * 1000).toISOString().substring(11, 19)} / ${new Date(task.times[scale.id].goal * 1000).toISOString().substring(11, 19)}`;
+                metaSpans[2].textContent = `${new Date(task.times[scale.id].elapsed * 1000).toISOString().substring(11, 19)} / ${new Date(task.times[scale.id].goal * 1000).toISOString().substring(11, 19)} (${new Date(Math.max(0, task.times[scale.id].goal - task.times[scale.id].elapsed) * 1000).toISOString().substring(11, 19)} left)`;
             }
 
             let progressBarFill = row.querySelector(".progress-bar-fill");
@@ -861,17 +861,17 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
             switch (label) {
                 case "Tasks":
                     meta_info.children[1].textContent = `${taskPercentage.toFixed(1)}%`;
-                    meta_info.children[2].textContent = `${new Date(totals.elapsed * 1000).toISOString().substring(11, 19)} / ${new Date(totals.goal * 1000).toISOString().substring(11, 19)}`;
+                    meta_info.children[2].textContent = `${new Date(totals.elapsed * 1000).toISOString().substring(11, 19)} / ${new Date(totals.goal * 1000).toISOString().substring(11, 19)} (${new Date(Math.max(0, totals.goal - totals.elapsed) * 1000).toISOString().substring(11, 19)} left)`;
                     progressBarFill.style.width = `${Math.min(100, taskPercentage)}%`;
                     break;
                 case "Free time used":
                     meta_info.children[1].textContent = `${freeTimeUsedPercentage.toFixed(1)}%`;
-                    meta_info.children[2].textContent = `${formatDuration(freeTimeUsedMs)} / ${formatDuration(initialFreeTimeMs)}`;
+                    meta_info.children[2].textContent = `${formatDuration(freeTimeUsedMs)} / ${formatDuration(initialFreeTimeMs)} (${formatDuration(Math.max(0, initialFreeTimeMs - freeTimeUsedMs))} left)`;
                     progressBarFill.style.width = `${Math.min(100, freeTimeUsedPercentage)}%`;
                     break;
                 case "Time":
                     meta_info.children[1].textContent = `${timePercentage.toFixed(1)}%`;
-                    meta_info.children[2].textContent = `${formatDuration(timeUsed)} / ${formatDuration(totalTimeMs)}`;
+                    meta_info.children[2].textContent = `${formatDuration(timeUsed)} / ${formatDuration(totalTimeMs)} (${formatDuration(Math.max(0, totalTimeMs - timeUsed))} left)`;
                     progressBarFill.style.width = `${Math.min(100, timePercentage)}%`;
                     break;
             }
