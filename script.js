@@ -767,6 +767,7 @@ function RenderTimeScales(agendaData = state.agenda) {
         });
     });
 }
+
 let hasRungToday = false;
 
 function getWorkableTimeBetween(startMs, endMs) {
@@ -778,8 +779,14 @@ function getWorkableTimeBetween(startMs, endMs) {
     state.agenda.forEach(block => {
         if (block.busy && block.iso) {
             const blockStartMs = new Date(block.iso).getTime();
-            if (blockStartMs >= startMs && blockStartMs < endMs) {
-                busyTimeMs += slotDurationMs;
+            const blockEndMs = blockStartMs + slotDurationMs;
+
+            if (blockEndMs > startMs && blockStartMs < endMs) {
+                
+                const overlapStart = Math.max(startMs, blockStartMs);
+                const overlapEnd = Math.min(endMs, blockEndMs);
+                
+                busyTimeMs += (overlapEnd - overlapStart);
             }
         }
     });
