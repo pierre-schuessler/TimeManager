@@ -768,21 +768,115 @@ function RenderTimeScales(agendaData = state.agenda) {
     });
 }
 
+let hasRungToday = false;
+
+function getRequiredWorkTodayMs() {
+    const now = new Date();
+    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
+    const slotDurationMs = 15 * 60 * 1000;
+    let requiredWorkTodayMs = 0;
+
+    state.timeScales.forEach(scale => {
+        const scaleEndMs = new Date(scale.start).getTime() + (scale.duration * 24 * 60 * 60 * 1000);
+
+        let totalRemainingWorkForScaleMs = 0;
+        state.tasks.forEach(task => {
+            const goalMs = (task.times[scale.id]?.goal || 0) * 1000;
+            const elapsedMs = (task.times[scale.id]?.elapsed || 0) * 1000;
+            totalRemainingWorkForScaleMs += Math.max(0, goalMs - elapsedMs);
+        });
+
+        if (totalRemainingWorkForScaleMs > 0) {
+            let futureWorkableTimeMs = 0;
+
+            if (scaleEndMs > endOfDay) {
+                const rawFutureTimeMs = scaleEndMs - endOfDay;
+                let futureBusyTimeMs = 0;
+
+                state.agenda.forEach(block => {
+                    if (block.busy) {
+                        const blockStartMs = new Date(block.iso).getTime();
+                        if (blockStartMs >= endOfDay && blockStartMs < scaleEndMs) {
+                            futureBusyTimeMs += slotDurationMs;
+                        }
+                    }
+                });
+
+                futureWorkableTimeMs = Math.max(0, rawFutureTimeMs - futureBusyTimeMs);
+            }
+
+            const scaleOverflowTodayMs = Math.max(0, totalRemainingWorkForScaleMs - futureWorkableTimeMs);
+
+            if (scaleOverflowTodayMs > requiredWorkTodayMs) {
+                requiredWorkTodayMs = scaleOverflowTodayMs;
+            }
+        }
+    });
+
+    return requiredWorkTodayMs;
+}
+
+function getTodayWorkableRemainingMs() {
+    const now = new Date();
+    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
+    const slotDurationMs = 15 * 60 * 1000;
+    let todayBusyRemainingMs = 0;
+
+    state.agenda.forEach(block => {
+        if (block.busy) {
+            const blockStartMs = new Date(block.iso).getTime();
+            if (blockStartMs >= now.getTime() && blockStartMs < endOfDay) {
+                todayBusyRemainingMs += slotDurationMs;
+            }
+        }
+    });
+
+    return Math.max(0, (endOfDay - now.getTime()) - todayBusyRemainingMs);
+}
+
 function UpdateTimeScalesRender(agendaData = state.agenda) {
     checkTimeScaleDone();
     let timeScaleContainers = document.querySelectorAll(".time-scale");
-    
+
+    const requiredWorkTodayMs = getRequiredWorkTodayMs();
+    const todayWorkableRemainingMs = getTodayWorkableRemainingMs();
+    const wiggleRoomTodayMs = todayWorkableRemainingMs - requiredWorkTodayMs;
+
+    if (requiredWorkTodayMs > 0) {
+        if (wiggleRoomTodayMs >= 0 && wiggleRoomTodayMs <= 5 * 60 * 1000) {
+            if (!hasRungToday) {
+                console.log(`RING TRIGGERED. Required today: ${requiredWorkTodayMs / 1000}s, workable time left: ${todayWorkableRemainingMs / 1000}s.`);
+                ring();
+                document.getElementById("modal-title").innerText = "Time Alert";
+                document.getElementById("modal-body").innerHTML = `
+                    <p>Time to start working on your tasks!</p>
+                    <p>You have less than 5 minutes of wiggle room left today before your goals become unreachable.</p>
+                `;
+                document.getElementById("btn-submit").innerText = "I'll start working!";
+                document.getElementById("btn-submit").onclick = function() {
+                    closeModal("modal");
+                }
+                openModal("modal");
+                hasRungToday = true;
+            }
+        } else if (wiggleRoomTodayMs > 5 * 60 * 1000) {
+            hasRungToday = false;
+        }
+    } else {
+        hasRungToday = false;
+    }
+
     timeScaleContainers.forEach((timeScaleContainer) => {
-        
+
         let header = timeScaleContainer.querySelector(".time-scale-header > h3");
         if (!header) return;
-        
+
         let scale = state.timeScales.find((s) => s.name === header.textContent);
         if (!scale) return;
 
-        
+
         const totals = state.tasks.reduce((acc, task) => {
-            acc.elapsed += Math.min(Number(task.times[scale.id]?.elapsed) || 0, Number(task.times[scale.id]?.goal) || 0); 
+            acc.elapsed += Math.min(Number(task.times[scale.id]?.elapsed) || 0, Number(task.times[scale.id]?.goal) || 0);
             acc.goal += Number(task.times[scale.id]?.goal) || 0;
             return acc;
         }, { elapsed: 0, goal: 0 });
@@ -796,7 +890,7 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
         const durationDays = Number(scale.duration) || 0;
 
         const rawTotalTimeMs = durationDays * 24 * 60 * 60 * 1000;
-        const slotDurationMs = 15 * 60 * 1000; 
+        const slotDurationMs = 15 * 60 * 1000;
 
         let totalExcludedTimeMs = 0;
         let passedExcludedTimeMs = 0;
@@ -814,7 +908,7 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
             }
         });
 
-        
+
         const totalTimeMs = rawTotalTimeMs - totalExcludedTimeMs;
         const rawTimeUsed = currentTime - startTimeMs;
         const timeUsed = rawTimeUsed - passedExcludedTimeMs;
@@ -822,68 +916,24 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
         const timeRemaining = Math.max(0, totalTimeMs - timeUsed);
         const taskRemainingMs = Math.max(0, (totals.goal - totals.elapsed) * 1000);
 
-        
+
         const initialFreeTimeMs = Math.max(0, totalTimeMs - (totals.goal * 1000));
         const currentFreeTimeMs = timeRemaining - taskRemainingMs;
-        
-        
+
+
         const freeTimeUsedMs = Math.max(0, initialFreeTimeMs - Math.max(0, currentFreeTimeMs));
 
         const freeTimeUsedPercentage = (initialFreeTimeMs > 0)
             ? Math.min(100, Math.max(0, (freeTimeUsedMs / initialFreeTimeMs) * 100))
-            : (freeTimeUsedMs > 0 ? 100 : 0); 
+            : (freeTimeUsedMs > 0 ? 100 : 0);
 
         const timePercentage = (totalTimeMs > 0 && !isNaN(timeUsed))
             ? Math.min(100, Math.max(0, (timeUsed / totalTimeMs) * 100))
             : 0;
 
-        
-        if (taskRemainingMs > 0 && taskPercentage < 100) { 
-            if (currentFreeTimeMs < 0 && !scale.hasWarnedImpossible) {
-                
-                console.warn(`WARNING: Schedule broken for "${scale.name}". You need ${taskRemainingMs/1000}s of work, but only have ${timeRemaining/1000}s of free time left!`);
-                scale.hasWarnedImpossible = true;
-                
-                document.getElementById("modal-title").innerText = "Schedule Alert";
-                document.getElementById("modal-body").innerHTML = `
-                    <p style="color: red; font-weight: bold;">Your schedule for "${scale.name}" is mathematically impossible!</p>
-                    <p>You have <b>${formatDuration(taskRemainingMs)}</b> of work left, but only <b>${formatDuration(timeRemaining)}</b> of workable time remaining.</p>
-                    <p>Please adjust your agenda or reduce your task goals.</p>
-                `;
-                document.getElementById("btn-submit").innerText = "I understand";
-                document.getElementById("btn-submit").onclick = function() {
-                    closeModal("modal");
-                }
-                openModal("modal");
 
-            } else if (currentFreeTimeMs >= 0 && currentFreeTimeMs <= 5 * 60 * 1000) {
-                if (!scale.hasRung) { 
-                    console.log(`RING TRIGGERED for "${scale.name}". Time Remaining: ${timeRemaining/1000}s, Tasks Remaining: ${taskRemainingMs/1000}s.`);
-                    ring();
-                    document.getElementById("modal-title").innerText = "Time Alert";
-                    document.getElementById("modal-body").innerHTML = `
-                        <p>Time to start working on tasks for the "${scale.name}" time scale!</p>
-                        <p>You have less than 5 minutes of wiggle room left before you miss your goals.</p>
-                    `;
-                    document.getElementById("btn-submit").innerText = "I'll start working!";
-                    document.getElementById("btn-submit").onclick = function() {
-                        closeModal("modal");
-                    }
-                    openModal("modal");
-                    scale.hasRung = true; 
-                }
-            } else if (currentFreeTimeMs > 5 * 60 * 1000) {
-                scale.hasRung = false; 
-                scale.hasWarnedImpossible = false;
-            }
-        } else {
-            scale.hasRung = false; 
-            scale.hasWarnedImpossible = false;
-        }
-
-       
         let blocks = timeScaleContainer.querySelectorAll(".time-scale-progress-block");
-        
+
         blocks.forEach((block) => {
             let meta_info = block.querySelector(".time-scale-progress-meta");
             let progressBarFill = block.querySelector(".progress-bar-fill");
@@ -897,10 +947,10 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
                     break;
                 case "Free time used":
                     meta_info.children[1].textContent = `${freeTimeUsedPercentage.toFixed(1)}%`;
-                    
+
                     const wiggleRoomStr = currentFreeTimeMs < 0 ? `-${formatDuration(Math.abs(currentFreeTimeMs))}` : formatDuration(currentFreeTimeMs);
                     meta_info.children[2].textContent = `${formatDuration(freeTimeUsedMs)} / ${formatDuration(initialFreeTimeMs)} (${wiggleRoomStr} left)`;
-                    
+
                     progressBarFill.style.width = `${Math.min(100, freeTimeUsedPercentage)}%`;
                     if (currentFreeTimeMs < 0) {
                         progressBarFill.style.backgroundColor = "darkred";
