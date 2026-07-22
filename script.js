@@ -767,7 +767,6 @@ function RenderTimeScales(agendaData = state.agenda) {
         });
     });
 }
-
 let hasRungToday = false;
 
 function getWorkableTimeBetween(startMs, endMs) {
@@ -786,6 +785,39 @@ function getWorkableTimeBetween(startMs, endMs) {
     });
 
     return Math.max(0, rawTimeMs - busyTimeMs);
+}
+
+function getInitialRequiredWorkByDeadlineMs(targetEndMs) {
+    let totalRequiredMs = 0;
+
+    state.tasks.forEach(task => {
+        let maxTaskRequiredForDeadlineMs = 0;
+
+        state.timeScales.forEach(scale => {
+            const scaleEndMs = new Date(scale.start).getTime() + (scale.duration * 24 * 60 * 60 * 1000);
+            const goal = Number(task.times[scale.id]?.goal) || 0;
+            const taskGoalMs = goal * 1000; 
+
+            if (taskGoalMs > 0) {
+                let requiredForTaskMs = 0;
+
+                if (scaleEndMs <= targetEndMs) {
+                    requiredForTaskMs = taskGoalMs;
+                } else {
+                    const futureWorkableMs = getWorkableTimeBetween(targetEndMs, scaleEndMs);
+                    requiredForTaskMs = Math.max(0, taskGoalMs - futureWorkableMs);
+                }
+
+                if (requiredForTaskMs > maxTaskRequiredForDeadlineMs) {
+                    maxTaskRequiredForDeadlineMs = requiredForTaskMs;
+                }
+            }
+        });
+
+        totalRequiredMs += maxTaskRequiredForDeadlineMs;
+    });
+
+    return totalRequiredMs;
 }
 
 function getRequiredWorkByDeadlineMs(targetEndMs) {
@@ -906,10 +938,10 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
         const workableRemainingMs = getWorkableTimeBetween(currentTime, scaleEndMs);
 
         const totalTaskRequiredForDeadlineMs = getRequiredWorkByDeadlineMs(scaleEndMs);
-
         const currentFreeTimeMs = workableRemainingMs - totalTaskRequiredForDeadlineMs;
-
-        const initialFreeTimeMs = Math.max(0, totalTimeMs - totalTaskRequiredForDeadlineMs);
+        
+        const initialTaskRequiredForDeadlineMs = getInitialRequiredWorkByDeadlineMs(scaleEndMs);
+        const initialFreeTimeMs = Math.max(0, totalTimeMs - initialTaskRequiredForDeadlineMs);
 
         const freeTimeUsedMs = Math.max(
             0,
