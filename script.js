@@ -767,12 +767,11 @@ function RenderTimeScales(agendaData = state.agenda) {
         });
     });
 }
-
 let hasRungToday = false;
 
 function getRequiredWorkTodayMs() {
     const now = new Date();
-    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
+    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
     const slotDurationMs = 15 * 60 * 1000;
     let requiredWorkTodayMs = 0;
 
@@ -789,14 +788,14 @@ function getRequiredWorkTodayMs() {
         if (totalRemainingWorkForScaleMs > 0) {
             let futureWorkableTimeMs = 0;
 
-            if (scaleEndMs > tomorrow) {
-                const rawFutureTimeMs = scaleEndMs - tomorrow;
+            if (scaleEndMs > endOfDay) {
+                const rawFutureTimeMs = scaleEndMs - endOfDay;
                 let futureBusyTimeMs = 0;
 
                 state.agenda.forEach(block => {
                     if (block.busy) {
                         const blockStartMs = new Date(block.iso).getTime();
-                        if (blockStartMs >= tomorrow && blockStartMs < scaleEndMs) {
+                        if (blockStartMs >= endOfDay && blockStartMs < scaleEndMs) {
                             futureBusyTimeMs += slotDurationMs;
                         }
                     }
@@ -807,7 +806,9 @@ function getRequiredWorkTodayMs() {
 
             const scaleOverflowTodayMs = Math.max(0, totalRemainingWorkForScaleMs - futureWorkableTimeMs);
 
-            requiredWorkTodayMs = Math.max(requiredWorkTodayMs, scaleOverflowTodayMs);
+            if (scaleOverflowTodayMs > requiredWorkTodayMs) {
+                requiredWorkTodayMs = scaleOverflowTodayMs;
+            }
         }
     });
 
