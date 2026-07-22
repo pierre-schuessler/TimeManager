@@ -665,7 +665,7 @@ function getTimeScaleStreak(scaleId) {
         .filter(stat => stat.scaleId === scaleId)
         .reverse();
 
-    let streakInDays = 0;
+    let streakInScales = 0;
 
     for (const stat of scaleStats) {
         const cappedTotalWorked = stat.tasks.reduce((sum, task) => {
@@ -675,13 +675,13 @@ function getTimeScaleStreak(scaleId) {
         const isCompleted = stat.goal === 0 || cappedTotalWorked >= stat.goal;
 
         if (isCompleted) {
-            streakInDays += stat.duration;
+            streakInScales++;
         } else {
             break; 
         }
     }
 
-    return streakInDays;
+    return streakInScales;
 }
 
 
