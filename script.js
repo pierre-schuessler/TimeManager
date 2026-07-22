@@ -881,7 +881,7 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
                 document.getElementById("modal-title").innerText = "Time Alert";
                 document.getElementById("modal-body").innerHTML = `
                     <p>Time to start working on your tasks!</p>
-                    <p>You have less than 5 minutes of wiggle room left today before your goals become unreachable.</p>
+                    <p>You have less than 5 minutes of free time left today.</p>
                 `;
 
                 document.getElementById("btn-submit").innerText = "I'll start working!";
