@@ -947,13 +947,11 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
         const totalTaskRequiredForDeadlineMs = getRequiredWorkByDeadlineMs(scaleEndMs);
         const currentFreeTimeMs = workableRemainingMs - totalTaskRequiredForDeadlineMs;
         
-        const initialTaskRequiredForDeadlineMs = getInitialRequiredWorkByDeadlineMs(scaleEndMs);
-        const initialFreeTimeMs = Math.max(0, totalTimeMs - initialTaskRequiredForDeadlineMs);
+        const rawElapsedMs = state.tasks.reduce((sum, task) => sum + (Number(task.times[scale.id]?.elapsed) || 0) * 1000, 0);
 
-        const freeTimeUsedMs = Math.max(
-            0,
-            initialFreeTimeMs - Math.max(0, currentFreeTimeMs)
-        );
+        const freeTimeUsedMs = Math.max(0, timeUsed - rawElapsedMs);
+
+        const initialFreeTimeMs = Math.max(0, currentFreeTimeMs) + freeTimeUsedMs;
 
         const freeTimeUsedPercentage = initialFreeTimeMs > 0
             ? Math.min(100, Math.max(0, (freeTimeUsedMs / initialFreeTimeMs) * 100))
