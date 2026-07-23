@@ -295,6 +295,10 @@ function moveTaskUp(id) {
 
 function editTask(id) {
     let task = state.tasks.find((task) => task.id === id);
+    if (task.running){
+        window.alert("Please stop the task before editing it.")
+        return;
+    }
     let taskIndex = state.tasks.findIndex((task) => task.id === id);
     document.getElementById("modal-title").innerText = "Edit Task";
     
@@ -305,18 +309,29 @@ function editTask(id) {
         </div>
         ${
             state.timeScales.map((scale) => {
-                const totalSecs = task.times[scale.id].goal || 0;
-                const h = Math.floor(totalSecs / 3600);
-                const m = Math.floor((totalSecs % 3600) / 60);
-                const s = totalSecs % 60;
+                const elapsedSecs = task.times[scale.id].elapsed || 0;
+                const eh = Math.floor(elapsedSecs / 3600);
+                const em = Math.floor((elapsedSecs % 3600) / 60);
+                const es = elapsedSecs % 60;
+
+                const goalSecs = task.times[scale.id].goal || 0;
+                const gh = Math.floor(goalSecs / 3600);
+                const gm = Math.floor((goalSecs % 3600) / 60);
+                const gs = goalSecs % 60;
 
                 return `
                     <div class="form-group">
-                        <label>${scale.name} goal <span style="color:red">*</span></label>
-                        <div style="display: flex; gap: 8px; align-items: center;">
-                            <input type="number" id="modal-task-${scale.id}-h" value="${h}" min="0" placeholder="HH" style="width: 70px;"> hrs
-                            <input type="number" id="modal-task-${scale.id}-m" value="${m}" min="0" max="59" placeholder="MM" style="width: 70px;"> mins
-                            <input type="number" id="modal-task-${scale.id}-s" value="${s}" min="0" max="59" placeholder="SS" style="width: 70px;"> secs
+                        <label>${scale.name} (Elapsed / Goal) <span style="color:red">*</span></label>
+                        <div style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap;">
+                            <input type="number" id="modal-task-${scale.id}-elapsed-h" value="${eh}" min="0" placeholder="HH" style="width: 55px;"> h
+                            <input type="number" id="modal-task-${scale.id}-elapsed-m" value="${em}" min="0" max="59" placeholder="MM" style="width: 55px;"> m
+                            <input type="number" id="modal-task-${scale.id}-elapsed-s" value="${es}" min="0" max="59" placeholder="SS" style="width: 55px;"> s
+                            
+                            <span style="font-size: 24px; font-weight: bold; margin: 0 8px; color: #555;">/</span>
+                            
+                            <input type="number" id="modal-task-${scale.id}-goal-h" value="${gh}" min="0" placeholder="HH" style="width: 55px;"> h
+                            <input type="number" id="modal-task-${scale.id}-goal-m" value="${gm}" min="0" max="59" placeholder="MM" style="width: 55px;"> m
+                            <input type="number" id="modal-task-${scale.id}-goal-s" value="${gs}" min="0" max="59" placeholder="SS" style="width: 55px;"> s
                         </div>
                     </div>
                 `;
@@ -346,18 +361,24 @@ function editTask(id) {
         
         try {
             task.times = state.timeScales.reduce((acc, scale) => {
-                const h = parseInt(document.getElementById(`modal-task-${scale.id}-h`).value) || 0;
-                const m = parseInt(document.getElementById(`modal-task-${scale.id}-m`).value) || 0;
-                const s = parseInt(document.getElementById(`modal-task-${scale.id}-s`).value) || 0;
+                const eh = parseInt(document.getElementById(`modal-task-${scale.id}-elapsed-h`).value) || 0;
+                const em = parseInt(document.getElementById(`modal-task-${scale.id}-elapsed-m`).value) || 0;
+                const es = parseInt(document.getElementById(`modal-task-${scale.id}-elapsed-s`).value) || 0;
 
-                if (h < 0 || m < 0 || s < 0) {
+                const gh = parseInt(document.getElementById(`modal-task-${scale.id}-goal-h`).value) || 0;
+                const gm = parseInt(document.getElementById(`modal-task-${scale.id}-goal-m`).value) || 0;
+                const gs = parseInt(document.getElementById(`modal-task-${scale.id}-goal-s`).value) || 0;
+
+                if (eh < 0 || em < 0 || es < 0 || gh < 0 || gm < 0 || gs < 0) {
                     throw new Error("Time values cannot be negative.");
                 }
 
-                const newGoal = (h * 3600) + (m * 60) + s;
+                const newElapsed = (eh * 3600) + (em * 60) + es;
+                const newGoal = (gh * 3600) + (gm * 60) + gs;
 
                 acc[scale.id] = {
                     ...task.times[scale.id],
+                    elapsed: newElapsed,
                     goal: newGoal
                 };
                 return acc;
