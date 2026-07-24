@@ -63,8 +63,8 @@ main {
     display: grid;
     grid-template-areas:
         "tasks time-scale"
-        "tasks statistics"
-        "agenda statistics";
+        "tasks agenda"
+        "statistics agenda";
     grid-template-columns: 1fr 1fr;
     gap: var(--spacing-xl);
     margin : var(--spacing-xl) 0px;
