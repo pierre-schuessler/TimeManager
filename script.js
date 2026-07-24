@@ -1349,6 +1349,8 @@ function openFullStatisticsModal() {
     document.getElementById("modal-title").innerText = "Full Statistics";
     document.getElementById("modal-body").innerHTML = `<div id="modal-statistics-container" style="max-height: 60vh; overflow-y: auto;"></div>`;
 
+    document.getElementById("modal-cancel").style.display = "none";
+
     document.getElementById("btn-submit").innerText = "Close";
     document.getElementById("btn-submit").onclick = function() {
         closeModal("modal");
@@ -1496,6 +1498,7 @@ openModal = (id) => document.getElementById(id).classList.add('active');
 closeModal = (id) => {
     document.getElementById("delete-button")?.remove();
     document.getElementById("move-up-button")?.remove();
+    document.getElementById("modal-cancel").style.display = "";
     document.getElementById(id).classList.remove('active');
 };
 
