@@ -1345,11 +1345,23 @@ function checkTimeScaleDone() {
     return SomethingChanged;
 }
 
-function RenderStatistics() {
-    const container = document.getElementById("root-statistics");
+function openFullStatisticsModal() {
+    document.getElementById("modal-title").innerText = "Full Statistics";
+    document.getElementById("modal-body").innerHTML = `<div id="modal-statistics-container" style="max-height: 60vh; overflow-y: auto;"></div>`;
+
+    document.getElementById("btn-submit").innerText = "Close";
+    document.getElementById("btn-submit").onclick = function() {
+        closeModal("modal");
+    };
+
+    openModal("modal");
+
+    RenderStatistics(document.getElementById("modal-statistics-container"), true);
+}
+
+function RenderStatistics(container = document.getElementById("root-statistics"), full = false) {
     if (!container) return;
 
-   
     if (!state.statistics || state.statistics.length === 0) {
         container.innerHTML = `
             <h3>Statistics</h3>
@@ -1360,15 +1372,23 @@ function RenderStatistics() {
         return;
     }
 
-    
     const sortedStats = [...state.statistics].reverse();
 
+    let displayStats = sortedStats;
+    if (!full) {
+        const counts = {};
+        displayStats = sortedStats.filter((stat) => {
+            counts[stat.scaleId] = (counts[stat.scaleId] || 0) + 1;
+            return counts[stat.scaleId] <= 2;
+        });
+    }
+
     container.innerHTML = `
-        <h3>Statistics</h3>
+        ${!full ? '<h3>Statistics</h3>' : ''}
         <div id="statistics-list-container">
-            ${sortedStats.map((stat) => {
+            ${displayStats.map((stat) => {
                 const start = new Date(stat.start);
-                let end = new Date(start.getTime() + (stat.duration-1) * 24 * 60 * 60 * 1000);
+                let end = new Date(start.getTime() + (stat.duration - 1) * 24 * 60 * 60 * 1000);
                 const dateRange = `${start.toLocaleDateString('en-GB')}${stat.duration == 1 ? "" : `- ${end.toLocaleDateString('en-GB')}`}`;
             
                 const cappedTotalWorked = stat.tasks.reduce((sum, task) => {
@@ -1424,9 +1444,12 @@ function RenderStatistics() {
                     </div>
                 `;
             }).join("")}
+            
+            ${!full ? `<div class="time-scale" style="text-align: center; cursor: pointer;" onclick="openFullStatisticsModal()">View Full Statistics</div>` : ''}
         </div>
     `;
 }
+
 function openHelp(){
     document.getElementById("modal-title").innerText = "How to use the tracker";
     document.getElementById("modal-body").innerHTML = `
