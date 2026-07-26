@@ -1494,13 +1494,29 @@ function openHelp(){
     openModal("modal");
 }
 
-openModal = (id) => document.getElementById(id).classList.add('active');
-closeModal = (id) => {
+const openModal = (id) => document.getElementById(id).classList.add('active');
+const closeModal = (id) => {
     document.getElementById("delete-button")?.remove();
     document.getElementById("move-up-button")?.remove();
     document.getElementById("modal-cancel").style.display = "";
     document.getElementById(id).classList.remove('active');
 };
+
+window.resetTimes = resetTimes;
+window.openHelp = openHelp;
+window.closeModal = closeModal;
+window.createNewTask = createNewTask;
+window.toggleTask = toggleTask;
+window.moveTaskUp = moveTaskUp;
+window.editTask = editTask;
+window.deleteTask = deleteTask;
+window.createNewSubtask = createNewSubtask;
+window.toggleSubtask = toggleSubtask;
+window.addTimeScale = addTimeScale;
+window.editTimeScale = editTimeScale;
+window.deleteTimeScale = deleteTimeScale;
+window.openFullStatisticsModal = openFullStatisticsModal;
+window.openModal = openModal;
 
 Load()
 RenderTasks()
