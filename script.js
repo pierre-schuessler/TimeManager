@@ -1,3 +1,112 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-analytics.js"; 
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+import { getDatabase, ref, set, get, child } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
+
+const firebaseConfig = {
+    apiKey: "AIzaSyCJNvK9FJ06goVNdwXkzFViiqSdoeQSZ3Y",
+    authDomain: "task-timer-5707f.firebaseapp.com",
+    databaseURL: "https://task-timer-5707f-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "task-timer-5707f",
+    storageBucket: "task-timer-5707f.firebasestorage.app",
+    messagingSenderId: "92789344543",
+    appId: "1:92789344543:web:708c7e15e3353e8f7a882a",
+    measurementId: "G-0Z2XZ4R834"
+};
+
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+const auth = getAuth(app);
+const db = getDatabase(app);
+
+
+onAuthStateChanged(auth, async (user) => {
+    let openLoginButton = document.getElementById("btn-open-login")
+    document.getElementById("btn-help").classList.remove("btn-primary");
+    
+    if (user) {
+        openLoginButton.textContent = "Log out"
+        openLoginButton.setAttribute('onclick','Logout()')
+        
+        await Load();
+        RenderTasks();
+        RenderTimeScales();
+        RenderAgenda();
+        RenderStatistics();
+        
+    } else {
+        openLoginButton.textContent = "Log in"
+        openLoginButton.setAttribute('onclick','openLogin()')
+        
+        await Load();
+        RenderTasks();
+        RenderTimeScales();
+        RenderAgenda();
+        RenderStatistics();
+    }
+    openLoginButton.style.display = "";
+});
+
+function Logout(){
+    signOut(auth);
+}
+
+function openLogin(){
+    document.getElementById("modal-title").innerText = "Log in or register";
+    document.getElementById("modal-body").innerHTML = `
+        <div class="form-group">
+            <label>Email<span style="color:red">*</span></label>
+            <input type="email" id="email-input" value="">
+        </div>
+        <div class="form-group">
+            <label>Password<span style="color:red">*</span></label>
+            <input type="password" id="password-input" value="">
+        </div>
+    `;
+
+    document.getElementById("btn-submit").innerText = "Log in";
+    document.getElementById("btn-submit").onclick = async function() {
+        const email = document.getElementById("email-input").value;
+        const password = document.getElementById("password-input").value;
+        
+        try {
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            console.log("Successfully logged in!", userCredential.user);
+            closeModal("modal");
+            return userCredential.user;
+            
+        } catch (error) {
+            console.log("Login failed with code:", error.code);
+
+            if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+            console.log("Attempting to create a new account...");
+            
+            try {
+                const newUserCredential = await createUserWithEmailAndPassword(auth, email, password);
+                console.log("Account successfully created and logged in!", newUserCredential.user);
+                closeModal("modal");
+                return newUserCredential.user;
+                
+            } catch (creationError) {
+                if (creationError.code === 'auth/email-already-in-use') {
+                console.error("This email is already registered, but the password was incorrect.");
+                } else {
+                console.error("Error creating account:", creationError.message);
+                }
+            }
+            } else {
+            console.error("Error during sign in:", error.message);
+            }
+        }
+        
+    }
+    openModal("modal");
+}
+
+window.Logout = Logout;
+window.openLogin = openLogin;
+
+
 let state = {
     tasks: [],
     timeScales: [],
