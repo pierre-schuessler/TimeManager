@@ -1745,10 +1745,5 @@ window.editTimeScale = editTimeScale;
 window.deleteTimeScale = deleteTimeScale;
 window.openFullStatisticsModal = openFullStatisticsModal;
 window.openModal = openModal;
-showLoading()
-Load()
-RenderTasks()
-RenderTimeScales()
-RenderAgenda()
-RenderStatistics()
 
+showLoading()
