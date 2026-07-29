@@ -573,8 +573,8 @@ function moveTaskUp(id) {
     }
 }
 
-function editTask(id) {
-    Load()
+async function editTask(id) {
+    await Load()
     let task = state.tasks.find((task) => task.id === id);
     if (task.running){
         window.alert("Please stop the task before editing it.")
@@ -873,8 +873,8 @@ function addTimeScale() {
 
 }
 
-function editTimeScale(id) {
-    Load()
+async function editTimeScale(id) {
+    await Load()
     const scale = state.timeScales.find((scale) => scale.id === id);
     document.getElementById("modal-title").innerText = "Edit Time Scale";
     document.getElementById("modal-body").innerHTML = `
