@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-analytics.js"; 
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
-import { getDatabase, ref, set, get, child } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
+import { getDatabase, ref, set, get, child, onValue } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCJNvK9FJ06goVNdwXkzFViiqSdoeQSZ3Y",
@@ -29,6 +29,7 @@ onAuthStateChanged(auth, async (user) => {
         openLoginButton.textContent = "Log out"
         openLoginButton.setAttribute('onclick','Logout()')
         migrateButton.style.display = "";
+        setupFirebaseListener()
         
         await Load();
         RenderTasks();
@@ -65,6 +66,8 @@ function openLogin(){
             <label>Password<span style="color:red">*</span></label>
             <input type="password" id="password-input" value="">
         </div>
+
+        <p>Please note that you should never try to modify any of your data on two devices at once. This includes starting to work on tasks, editing the calendar, editing or creating tasks.</p>
     `;
 
     document.getElementById("btn-submit").innerText = "Log in";
@@ -156,6 +159,61 @@ async function migrateToFirebase() {
 }
 
 window.migrateToFirebase = migrateToFirebase;
+
+let isSavingLocally = false;
+
+function setupFirebaseListener() {
+    const user = auth.currentUser;
+
+    if (!user) {
+        console.warn("No user logged in. Cannot start Firebase listener.");
+        return;
+    }
+
+    const userRef = ref(db, `users/${user.uid}`);
+    
+    onValue(userRef, (snapshot) => {
+        if (isSavingLocally) {
+            console.log("Ignoring local save echo");
+            isSavingLocally = false; 
+            return; 
+        }
+        if (snapshot.exists()) {
+            
+            const isAnyTaskRunning = state.tasks.some(task => task.running === true);
+
+            if (isAnyTaskRunning) {
+                console.log("Firebase update received, but a local task is running. Ignoring server data to protect timer.");
+                return; 
+            }
+
+            console.log("Applying fresh Firebase updates...");
+            const fbData = snapshot.val();
+
+            state.timeScales = fbData.timeScales || state.timeScales;
+            
+            
+            if (fbData.tasks) {
+                state.tasks = fbData.tasks.map(task => ({
+                    ...task,
+                    times: task.times || {},
+                    subtasks: task.subtasks || []
+                }));
+            }
+
+            state.agenda = fbData.agenda || state.agenda;
+            state.statistics = fbData.statistics || state.statistics;
+
+            RenderTasks();
+            RenderTimeScales();
+            RenderAgenda();
+            RenderStatistics();
+        }
+    }, (error) => {
+        console.error("Firebase listener encountered an error:", error);
+    });
+}
+
 
 let state = {
     tasks: [],
@@ -274,6 +332,7 @@ async function Save(firebase=false) {
     const user = auth.currentUser;
     if (user && firebase) {
         try {
+            isSavingLocally = true;
             await set(ref(db, `users/${user.uid}`), {
                 timeScales: state.timeScales,
                 tasks: tasksToSave,
@@ -281,6 +340,7 @@ async function Save(firebase=false) {
                 statistics: state.statistics
             });
         } catch (error) {
+            isSavingLocally = false;
             console.error(error);
         }
     }
@@ -514,6 +574,7 @@ function moveTaskUp(id) {
 }
 
 function editTask(id) {
+    Load()
     let task = state.tasks.find((task) => task.id === id);
     if (task.running){
         window.alert("Please stop the task before editing it.")
@@ -813,6 +874,7 @@ function addTimeScale() {
 }
 
 function editTimeScale(id) {
+    Load()
     const scale = state.timeScales.find((scale) => scale.id === id);
     document.getElementById("modal-title").innerText = "Edit Time Scale";
     document.getElementById("modal-body").innerHTML = `
