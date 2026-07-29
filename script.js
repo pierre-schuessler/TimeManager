@@ -107,6 +107,53 @@ function openLogin(){
 window.Logout = Logout;
 window.openLogin = openLogin;
 
+async function migrateToFirebase() {
+    const user = auth.currentUser;
+
+    if (!user) {
+        console.log("Not connected to Firebase. Migration aborted.");
+        return;
+    }
+
+    if (!window.confirm("Are you sure you want to migrate your local data to firebase? This will override anything stored on your account.")) return;
+
+    try {
+        const localTimeScales = localStorage.getItem("timeScales");
+        const localTasks = localStorage.getItem("tasks");
+        const localAgenda = localStorage.getItem("agenda");
+        const localStatistics = localStorage.getItem("statistics");
+
+        if (!localTimeScales && !localTasks && !localAgenda && !localStatistics) {
+            console.log("No local storage data found to migrate.");
+            return;
+        }
+
+        const timeScales = localTimeScales ? JSON.parse(localTimeScales) : [];
+        const tasks = localTasks ? JSON.parse(localTasks) : [];
+        const agenda = localAgenda ? JSON.parse(localAgenda) : [];
+        const statistics = localStatistics ? JSON.parse(localStatistics) : [];
+
+        await set(ref(db, `users/${user.uid}`), {
+            timeScales: timeScales,
+            tasks: tasks,
+            agenda: agenda,
+            statistics: statistics
+        });
+
+        console.log("Successfully migrated local data to Firebase!");
+        
+        await Load()
+        RenderTasks();
+        RenderTimeScales();
+        RenderAgenda();
+        RenderStatistics();
+
+    } catch (error) {
+        console.error("Error migrating data to Firebase:", error);
+    }
+}
+
+window.migrateToFirebase = migrateToFirebase;
 
 let state = {
     tasks: [],
