@@ -70,6 +70,10 @@ main {
     margin : var(--spacing-xl) 0px;
 }
 
+@media (max-width: 640px) {
+    main{display: block;}
+}
+
 main > div {
     border: var(--border-standard);
     padding: var(--spacing-lg);
