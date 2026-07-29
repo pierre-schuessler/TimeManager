@@ -601,10 +601,6 @@ table > * {
         padding-top: var(--spacing-xs);
     }
 
-    #agenda-table {
-        min-width: 600px; 
-    }
-
     .modal-content {
         width: 95%;
         margin: 0 auto;
