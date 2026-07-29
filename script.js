@@ -344,7 +344,7 @@ async function Save(firebase=false) {
             console.error(error);
         }
     }
-    else
+    else if (!user)
     {
         localStorage.setItem("timeScales", JSON.stringify(state.timeScales));
         localStorage.setItem("tasks", JSON.stringify(tasksToSave));
@@ -1617,7 +1617,7 @@ function checkTimeScaleDone() {
     });
 
     if (SomethingChanged) {
-        Save(true);
+        Save();
         RenderTasks();
         RenderTimeScales()
         RenderAgenda()
