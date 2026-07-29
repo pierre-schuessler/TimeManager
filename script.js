@@ -22,11 +22,13 @@ const db = getDatabase(app);
 
 onAuthStateChanged(auth, async (user) => {
     let openLoginButton = document.getElementById("btn-open-login")
+    let migrateButton = document.getElementById("btn-migrate")
     document.getElementById("btn-help").classList.remove("btn-primary");
     
     if (user) {
         openLoginButton.textContent = "Log out"
         openLoginButton.setAttribute('onclick','Logout()')
+        migrateButton.style.display = "";
         
         await Load();
         RenderTasks();
@@ -37,7 +39,7 @@ onAuthStateChanged(auth, async (user) => {
     } else {
         openLoginButton.textContent = "Log in"
         openLoginButton.setAttribute('onclick','openLogin()')
-        
+        migrateButton.style.display = "none";
         await Load();
         RenderTasks();
         RenderTimeScales();
