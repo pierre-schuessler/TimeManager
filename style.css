@@ -591,6 +591,16 @@ table > * {
         grid-template-columns: 1fr;
     }
 
+    .task-progress-meta, .time-scale-progress-meta {
+        flex-wrap: wrap;
+    }
+
+    .task-progress-meta span:nth-child(3), .time-scale-progress-meta span:nth-child(3) {
+        flex-basis: 100%;
+        text-align: left;
+        padding-top: var(--spacing-xs);
+    }
+
     #agenda-table {
         min-width: 600px; 
     }
