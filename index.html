@@ -11,6 +11,7 @@
       <div>
         <button class="btn" id="btn-reset" onclick="resetTimes()">Reset</button>
         <button class="btn btn-primary" id="btn-help" onclick="openHelp()">Help</button>
+        <button class="btn btn-primary" id="btn-open-login" onclick="openLogin()" style="display:none;">Log in</button>
       </div>
     </header>
     <main>
@@ -35,6 +36,10 @@
         <button class="btn btn-primary" id="btn-submit"></button>
       </div>
     </div>
+  </div>
+
+  <div id="loading-overlay">
+      <div class="spinner"></div>
   </div>
     
     <script type="module" src="script.js"></script>

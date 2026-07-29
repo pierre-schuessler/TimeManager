@@ -1,3 +1,113 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-analytics.js"; 
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+import { getDatabase, ref, set, get, child } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
+
+const firebaseConfig = {
+    apiKey: "AIzaSyCJNvK9FJ06goVNdwXkzFViiqSdoeQSZ3Y",
+    authDomain: "task-timer-5707f.firebaseapp.com",
+    databaseURL: "https://task-timer-5707f-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "task-timer-5707f",
+    storageBucket: "task-timer-5707f.firebasestorage.app",
+    messagingSenderId: "92789344543",
+    appId: "1:92789344543:web:708c7e15e3353e8f7a882a",
+    measurementId: "G-0Z2XZ4R834"
+};
+
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+const auth = getAuth(app);
+const db = getDatabase(app);
+
+
+onAuthStateChanged(auth, async (user) => {
+    let openLoginButton = document.getElementById("btn-open-login")
+    document.getElementById("btn-help").classList.remove("btn-primary");
+    
+    if (user) {
+        openLoginButton.textContent = "Log out"
+        openLoginButton.setAttribute('onclick','Logout()')
+        
+        await Load();
+        RenderTasks();
+        RenderTimeScales();
+        RenderAgenda();
+        RenderStatistics();
+        
+    } else {
+        openLoginButton.textContent = "Log in"
+        openLoginButton.setAttribute('onclick','openLogin()')
+        
+        await Load();
+        RenderTasks();
+        RenderTimeScales();
+        RenderAgenda();
+        RenderStatistics();
+    }
+    openLoginButton.style.display = "";
+    hideLoading();
+});
+
+function Logout(){
+    signOut(auth);
+}
+
+function openLogin(){
+    document.getElementById("modal-title").innerText = "Log in or register";
+    document.getElementById("modal-body").innerHTML = `
+        <div class="form-group">
+            <label>Email<span style="color:red">*</span></label>
+            <input type="email" id="email-input" value="">
+        </div>
+        <div class="form-group">
+            <label>Password<span style="color:red">*</span></label>
+            <input type="password" id="password-input" value="">
+        </div>
+    `;
+
+    document.getElementById("btn-submit").innerText = "Log in";
+    document.getElementById("btn-submit").onclick = async function() {
+        const email = document.getElementById("email-input").value;
+        const password = document.getElementById("password-input").value;
+        
+        try {
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            console.log("Successfully logged in!", userCredential.user);
+            closeModal("modal");
+            return userCredential.user;
+            
+        } catch (error) {
+            console.log("Login failed with code:", error.code);
+
+            if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+            console.log("Attempting to create a new account...");
+            
+            try {
+                const newUserCredential = await createUserWithEmailAndPassword(auth, email, password);
+                console.log("Account successfully created and logged in!", newUserCredential.user);
+                closeModal("modal");
+                return newUserCredential.user;
+                
+            } catch (creationError) {
+                if (creationError.code === 'auth/email-already-in-use') {
+                console.error("This email is already registered, but the password was incorrect.");
+                } else {
+                console.error("Error creating account:", creationError.message);
+                }
+            }
+            } else {
+            console.error("Error during sign in:", error.message);
+            }
+        }
+        
+    }
+    openModal("modal");
+}
+
+window.Logout = Logout;
+window.openLogin = openLogin;
+
+
 let state = {
     tasks: [],
     timeScales: [],
@@ -5,13 +115,41 @@ let state = {
     statistics: []
 }
 
-function Load() {
-    let savedTimeScales = localStorage.getItem("timeScales")
+async function Load() {
+    const user = auth.currentUser;
+    
+    let rawData = {};
+
+    if (user) {
+        try {
+            const dbRef = ref(db);
+            const snapshot = await get(child(dbRef, `users/${user.uid}`));
+            
+            if (snapshot.exists()) {
+                const fbData = snapshot.val();
+                
+                if (fbData.timeScales) rawData.timeScales = JSON.stringify(fbData.timeScales);
+                if (fbData.tasks) rawData.tasks = JSON.stringify(fbData.tasks);
+                if (fbData.agenda) rawData.agenda = JSON.stringify(fbData.agenda);
+                if (fbData.statistics) rawData.statistics = JSON.stringify(fbData.statistics);
+            }
+        } catch (error) {
+            console.error(error);
+        }
+    }
+    else{
+        rawData = {
+        timeScales: localStorage.getItem("timeScales"),
+        tasks: localStorage.getItem("tasks"),
+        agenda: localStorage.getItem("agenda"),
+        statistics: localStorage.getItem("statistics")
+    }
+    }
 
     let todayMidnight = new Date();
     todayMidnight.setHours(0, 0, 0, 0);
 
-    state.timeScales = savedTimeScales ? JSON.parse(savedTimeScales) : [
+    state.timeScales = rawData.timeScales ? JSON.parse(rawData.timeScales) : [
         {
             id: crypto.randomUUID(),
             name: "Daily",
@@ -20,11 +158,23 @@ function Load() {
         },
     ]
 
-    let savedTasks = localStorage.getItem("tasks")
-    state.tasks = savedTasks ? JSON.parse(savedTasks) : []
+    let parsedTasks = rawData.tasks ? JSON.parse(rawData.tasks) : [];
+    state.tasks = parsedTasks.map(task => {
+        if (!task.times) task.times = {};
+        
+        state.timeScales.forEach(scale => {
+            if (!task.times[scale.id]) {
+                task.times[scale.id] = { elapsed: 0, goal: 3600 };
+            }
+        });
 
-    let savedAgenda = localStorage.getItem("agenda")
-    let parsedAgenda = savedAgenda ? JSON.parse(savedAgenda) : []
+        return {
+            ...task,
+            subtasks: task.subtasks || [] 
+        };
+    });
+
+    let parsedAgenda = rawData.agenda ? JSON.parse(rawData.agenda) : []
     
     state.agenda = parsedAgenda.map(item => {
         if (typeof item === 'number') {
@@ -40,15 +190,12 @@ function Load() {
         return null;
     }).filter(Boolean);
 
-    let savedStats = localStorage.getItem("statistics");
-    state.statistics = savedStats ? JSON.parse(savedStats) : [];
+    state.statistics = rawData.statistics ? JSON.parse(rawData.statistics) : [];
 }
 
-function Save() {
-    localStorage.setItem("timeScales", JSON.stringify(state.timeScales));
-
+async function Save(firebase=false) {
     let tasksToSave = state.tasks.map((task) => {
-        let cleanSubtasks = task.subtasks.map((subtask) => {
+        let cleanSubtasks = (task.subtasks || []).map((subtask) => {
             let { deleteTimeout, ...cleanSubtask } = subtask;
             return cleanSubtask;
         });
@@ -60,24 +207,41 @@ function Save() {
         };
     });
     
-    localStorage.setItem("tasks", JSON.stringify(tasksToSave));
-
     const earliestStart = state.timeScales.reduce((min, scale) => {
         const scaleStart = new Date(scale.start).getTime();
         return scaleStart < min ? scaleStart : min;
     }, Infinity);
 
-    // remove uselless agenda items
     state.agenda = state.agenda.filter((item) => {
         const itemTime = new Date(item.iso).getTime();
         const hasData = item.busy || item.tasksWorked;
-        const isAfterStart = itemTime >= (earliestStart - 2 * 86400); // two day padding
+        const isAfterStart = itemTime >= (earliestStart - 2 * 86400); 
         
         return hasData && isAfterStart;
     });
 
-    localStorage.setItem("agenda", JSON.stringify(state.agenda));
-    localStorage.setItem("statistics", JSON.stringify(state.statistics));
+    
+
+    const user = auth.currentUser;
+    if (user && firebase) {
+        try {
+            await set(ref(db, `users/${user.uid}`), {
+                timeScales: state.timeScales,
+                tasks: tasksToSave,
+                agenda: state.agenda,
+                statistics: state.statistics
+            });
+        } catch (error) {
+            console.error(error);
+        }
+    }
+    else
+    {
+        localStorage.setItem("timeScales", JSON.stringify(state.timeScales));
+        localStorage.setItem("tasks", JSON.stringify(tasksToSave));
+        localStorage.setItem("agenda", JSON.stringify(state.agenda));
+        localStorage.setItem("statistics", JSON.stringify(state.statistics));
+    }
 }
 
 
@@ -133,7 +297,7 @@ function createNewTask(){
             subtasks: []
         }
     )
-    Save()
+    Save(true)
     RenderTasks()
     RenderTimeScales()
 }
@@ -151,23 +315,30 @@ let startCounters;
 let lastTime;
 let deltaTime = 0;
 
-function toggleTask(id, UITarget) {
+async function toggleTask(id, UITarget) {
     let task = state.tasks.find((task) => task.id === id);
-    
+    if (!task) return; 
     
     timerWorker.postMessage('stop'); 
     
     if (task.running) {
         task.running = false;
+        await Save(true);
         UpdateTasksRender();
     } else {
-        state.tasks.forEach((task) => {
-            task.running = false;
+        await Load();
+        
+        task = state.tasks.find((t) => t.id === id);
+        if (!task) return;
+
+        state.tasks.forEach((t) => {
+            t.running = false;
         });
+        
         task.running = true;
         startTime = new Date().getTime();
         startCounters = JSON.parse(JSON.stringify(task.times));
-        lastTime = new Date().getTime();
+        lastTime = startTime;
 
         UpdateTasksRender();
         UpdateTimeScalesRender();
@@ -180,7 +351,7 @@ function toggleTask(id, UITarget) {
                 deltaTime = now - lastTime;
                 lastTime = now;
                 
-                let timeRemaining = deltaTime; // ms
+                let timeRemaining = deltaTime; 
                 let timeMarker = now;
 
                 while (timeRemaining > 0) {
@@ -288,7 +459,7 @@ function moveTaskUp(id) {
         const taskToMove = state.tasks.splice(index, 1)[0];
         state.tasks.splice(index - 1, 0, taskToMove);
         
-        Save();
+        Save(true);
         RenderTasks();
     }
 }
@@ -388,7 +559,7 @@ function editTask(id) {
             return;
         }
 
-        Save();
+        Save(true);
         RenderTasks();
         RenderTimeScales();
         closeModal("modal");
@@ -403,7 +574,7 @@ function deleteTask(id) {
     if (index !== -1 && window.confirm(`Are you sure you want to delete "${state.tasks[index].name}"`)) {
         state.tasks.splice(index, 1);
     }
-    Save();
+    Save(true);
     RenderTimeScales();
     RenderTasks();
     RenderAgenda();
@@ -417,7 +588,7 @@ function createNewSubtask(id) {
     
     if (subtaskName && subtaskName.trim() !== "") {
         task.subtasks.push({ name: subtaskName, done: false });
-        Save();
+        Save(true);
         RenderTasks();
     }
 }
@@ -447,7 +618,7 @@ function deleteSubtask(taskId, subtaskIndex) {
     let task = state.tasks.find((task) => task.id === taskId);
     task.subtasks.splice(subtaskIndex, 1);
     
-    Save();
+    Save(true);
     RenderTasks();
 }
 
@@ -585,7 +756,7 @@ function addTimeScale() {
             startCounters = JSON.parse(JSON.stringify(runningTask.times));
         }
 
-        Save();
+        Save(true);
         RenderTimeScales();
         RenderTasks();
         RenderAgenda();
@@ -623,7 +794,7 @@ function editTimeScale(id) {
             let localDate = new Date(newStart + "T00:00:00"); 
             scale.start = localDate.toISOString();
             
-            Save();
+            Save(true);
             RenderTimeScales();
             RenderTasks()
             RenderAgenda()
@@ -649,7 +820,7 @@ function deleteTimeScale(id) {
         });
     }
     
-    Save();
+    Save(true);
     RenderTimeScales();
     RenderTasks();
     RenderAgenda();
@@ -1057,7 +1228,7 @@ function resetTimes(){
         startCounters = null;
     }
 
-    Save()
+    Save(true)
     RenderTasks()
     RenderTimeScales()
     RenderAgenda()
@@ -1268,7 +1439,7 @@ function buildAgendaSelector() {
             currentHoverData = null;
             isEditingAgenda = false;
             
-            Save();
+            Save(true);
             UpdateTimeScalesRender();
             updatePreview();
         }
@@ -1335,7 +1506,7 @@ function checkTimeScaleDone() {
     });
 
     if (SomethingChanged) {
-        Save();
+        Save(true);
         RenderTasks();
         RenderTimeScales()
         RenderAgenda()
@@ -1502,6 +1673,14 @@ const closeModal = (id) => {
     document.getElementById(id).classList.remove('active');
 };
 
+function showLoading() {
+    document.getElementById("loading-overlay").classList.remove("hidden");
+}
+
+function hideLoading() {
+    document.getElementById("loading-overlay").classList.add("hidden");
+}
+
 window.resetTimes = resetTimes;
 window.openHelp = openHelp;
 window.closeModal = closeModal;
@@ -1517,9 +1696,10 @@ window.editTimeScale = editTimeScale;
 window.deleteTimeScale = deleteTimeScale;
 window.openFullStatisticsModal = openFullStatisticsModal;
 window.openModal = openModal;
-
+showLoading()
 Load()
 RenderTasks()
 RenderTimeScales()
 RenderAgenda()
 RenderStatistics()
+
