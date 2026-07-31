@@ -398,7 +398,7 @@ async function Save(firebase = false) {
       console.error(error);
     }
   } 
-  else if (!user || !firebase) {
+  else if (!user) {
     localStorage.setItem("timeScales", JSON.stringify(state.timeScales));
     localStorage.setItem("tasks", JSON.stringify(tasksToSave));
     localStorage.setItem("agenda", JSON.stringify(state.agenda));
