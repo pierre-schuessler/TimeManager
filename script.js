@@ -42,6 +42,7 @@ onAuthStateChanged(auth, async (user) => {
     startTime = runningTask.startedAt || new Date().getTime();
     startCounters = JSON.parse(JSON.stringify(runningTask.times));
     lastTime = new Date().getTime();
+    catchUpLocalAgenda();
     timerWorker.postMessage('start');
   }
 
@@ -248,6 +249,7 @@ function setupFirebaseListener() {
         startTime = isRunningNow.startedAt || new Date().getTime();
         startCounters = JSON.parse(JSON.stringify(isRunningNow.times));
         lastTime = new Date().getTime();
+        catchUpLocalAgenda();
         timerWorker.postMessage('start');
       } else if (!isRunningNow && wasRunning) {
         timerWorker.postMessage('stop');
@@ -398,7 +400,8 @@ async function Save(firebase = false) {
       console.error(error);
     }
   } 
-  else if (!user) {
+  
+  if (!user || !firebase) {
     localStorage.setItem("timeScales", JSON.stringify(state.timeScales));
     localStorage.setItem("tasks", JSON.stringify(tasksToSave));
     localStorage.setItem("agenda", JSON.stringify(state.agenda));
@@ -470,12 +473,55 @@ function getCurrentAgendaSlot() {
   return slot.toISOString();
 }
 
+function catchUpLocalAgenda() {
+  let task = state.tasks.find(t => t.running);
+  if (!task || !startTime) return;
+
+  let now = new Date().getTime();
+  let timeRemaining = now - startTime; 
+  let timeMarker = now;
+
+  while (timeRemaining > 0) {
+    let markerDate = new Date(timeMarker);
+    let minutes = Math.floor(markerDate.getMinutes() / 15) * 15;
+    let slotStart = new Date(markerDate.getFullYear(), markerDate.getMonth(), markerDate.getDate(), markerDate.getHours(), minutes, 0, 0);
+    let slotStartTime = slotStart.getTime();
+    
+    let timeInThisSlot;
+
+    if (timeMarker === slotStartTime) {
+      timeMarker -= 1;
+      continue; 
+    } else {
+      timeInThisSlot = Math.min(timeRemaining, timeMarker - slotStartTime);
+    }
+    
+    let currentSlotIso = slotStart.toISOString();
+    let agendaBlock = state.agenda.find(item => item.iso === currentSlotIso);
+
+    if (!agendaBlock) {
+      agendaBlock = { iso: currentSlotIso, busy: false, tasksWorked: {} };
+      state.agenda.push(agendaBlock);
+    }
+
+    if (!agendaBlock.tasksWorked) {
+      agendaBlock.tasksWorked = {};
+    }
+    
+    let timeInThisSlotSeconds = timeInThisSlot / 1000;
+    agendaBlock.tasksWorked[task.id] = (agendaBlock.tasksWorked[task.id] || 0) + timeInThisSlotSeconds;
+
+    timeMarker -= timeInThisSlot;
+    timeRemaining -= timeInThisSlot;
+  }
+}
 
 const timerWorker = new window.Worker('timerWorker.js');
 let startTime;
 let startCounters;
 let lastTime;
 let deltaTime = 0;
+
 
 timerWorker.onmessage = function(e) {
   if (e.data === 'tick') {
@@ -587,7 +633,6 @@ timerWorker.onmessage = function(e) {
   }
 };
 
-
 async function toggleTask(id, UITarget) {
   let task = state.tasks.find((task) => task.id === id);
   let taskIndex = state.tasks.findIndex((t) => t.id === id);
@@ -601,7 +646,10 @@ async function toggleTask(id, UITarget) {
     const user = auth.currentUser;
     if (user && taskIndex !== -1) {
       isSavingLocally = true;
-      let updates = { [`tasks/${taskIndex}/running`]: false };
+      let updates = { 
+        [`tasks/${taskIndex}/running`]: false,
+        [`agenda`]: state.agenda
+      };
       state.timeScales.forEach(scale => {
         updates[`tasks/${taskIndex}/times/${scale.id}/elapsed`] = task.times[scale.id].elapsed;
       });
@@ -610,6 +658,7 @@ async function toggleTask(id, UITarget) {
     
     await Save(false);
     UpdateTasksRender();
+    RenderAgenda();
   } else {
     await Load();
     
@@ -623,7 +672,10 @@ async function toggleTask(id, UITarget) {
         const user = auth.currentUser;
         if (user) {
           isSavingLocally = true;
-          let updates = { [`tasks/${idx}/running`]: false };
+          let updates = { 
+            [`tasks/${idx}/running`]: false,
+            [`agenda`]: state.agenda
+          };
           state.timeScales.forEach(scale => {
             updates[`tasks/${idx}/times/${scale.id}/elapsed`] = t.times[scale.id].elapsed;
           });
@@ -649,7 +701,6 @@ async function toggleTask(id, UITarget) {
 
     UpdateTasksRender();
     UpdateTimeScalesRender();
-    
     
     timerWorker.postMessage('start');
   }
@@ -1791,7 +1842,7 @@ function RenderStatistics(container = document.getElementById("root-statistics")
         const start = new Date(stat.start);
         let end = new Date(start.getTime() + (stat.duration - 1) * 24 * 60 * 60 * 1000);
         const dateRange = `${start.toLocaleDateString('en-GB')}${stat.duration == 1 ? "" : `- ${end.toLocaleDateString('en-GB')}`}`;
-      
+        
         const cappedTotalWorked = stat.tasks.reduce((sum, task) => {
           return sum + Math.min(Number(task.elapsed) || 0, Number(task.goal) || 0);
         }, 0);
