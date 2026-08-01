@@ -34,6 +34,10 @@ body {
     background: var(--background1);
 }
 
+body.active{
+    background: hsla(120, 73%, 60%, 0.4) !important;
+}
+
 header {
     border-radius: var(--radius-xl);
     border: var(--border-standard);

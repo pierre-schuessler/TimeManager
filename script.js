@@ -39,6 +39,7 @@ onAuthStateChanged(auth, async (user) => {
 
   let runningTask = state.tasks.find(t => t.running);
   if (runningTask) {
+    document.body.classList.add("active")
     startTime = runningTask.startedAt || new Date().getTime();
     startCounters = JSON.parse(JSON.stringify(runningTask.times));
     lastTime = new Date().getTime();
@@ -642,7 +643,7 @@ async function toggleTask(id, UITarget) {
   
   if (task.running) {
     task.running = false;
-    
+    document.body.classList.remove("active")
     const user = auth.currentUser;
     if (user && taskIndex !== -1) {
       isSavingLocally = true;
@@ -665,7 +666,7 @@ async function toggleTask(id, UITarget) {
     task = state.tasks.find((t) => t.id === id);
     taskIndex = state.tasks.findIndex((t) => t.id === id);
     if (!task) return;
-
+    document.body.classList.add("active")
     state.tasks.forEach((t, idx) => {
       if (t.running) {
         t.running = false;
