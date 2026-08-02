@@ -39,12 +39,14 @@ onAuthStateChanged(auth, async (user) => {
 
   let runningTask = state.tasks.find(t => t.running);
   if (runningTask) {
-    document.body.classList.add("active")
+    document.body.classList.add("active");
     startTime = runningTask.startedAt || new Date().getTime();
     startCounters = JSON.parse(JSON.stringify(runningTask.times));
     lastTime = new Date().getTime();
     catchUpLocalAgenda();
     timerWorker.postMessage('start');
+  } else {
+    document.body.classList.remove("active");
   }
 
   RenderTasks();
@@ -247,12 +249,14 @@ function setupFirebaseListener() {
       let isRunningNow = state.tasks.find(t => t.running);
 
       if (isRunningNow && (!wasRunning || wasRunning.id !== isRunningNow.id)) {
+        document.body.classList.add("active");
         startTime = isRunningNow.startedAt || new Date().getTime();
         startCounters = JSON.parse(JSON.stringify(isRunningNow.times));
         lastTime = new Date().getTime();
         catchUpLocalAgenda();
         timerWorker.postMessage('start');
       } else if (!isRunningNow && wasRunning) {
+        document.body.classList.remove("active");
         timerWorker.postMessage('stop');
       }
 
