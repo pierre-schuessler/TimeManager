@@ -181,56 +181,69 @@ function setupFirebaseListener() {
       const fbData = snapshot.val();
       let wasRunning = state.tasks.find(t => t.running);
       
-      let needsFullRender = false;
+      let needsTasksRender = false;
+      let needsTimeScalesRender = false;
+      let needsAgendaRender = false;
+      let needsStatisticsRender = false;
+
       const safeFbTasks = fbData.tasks || [];
       const safeFbScales = fbData.timeScales || [];
+      const safeFbAgenda = fbData.agenda || [];
+      const safeFbStats = fbData.statistics || [];
       
-      if (state.tasks.length !== safeFbTasks.length || 
-          state.timeScales.length !== safeFbScales.length ||
-          state.agenda.length !== (fbData.agenda || []).length) {
-        needsFullRender = true;
-      } 
-      else {
+      if (state.timeScales.length !== safeFbScales.length) {
+        needsTimeScalesRender = true;
+      } else {
         for (let i = 0; i < state.timeScales.length; i++) {
           let oldScale = state.timeScales[i];
           let newScale = safeFbScales[i];
           if (oldScale.name !== newScale.name || 
               oldScale.duration !== newScale.duration || 
               oldScale.start !== newScale.start) {
-            needsFullRender = true;
+            needsTimeScalesRender = true;
             break;
           }
         }
+      }
 
-        if (!needsFullRender) {
-          for (let i = 0; i < state.tasks.length; i++) {
-            let oldTask = state.tasks[i];
-            let newTask = safeFbTasks[i];
-            
-            if (oldTask.name !== newTask.name) {
-              needsFullRender = true;
-              break;
-            }
-            
-            let oldSub = oldTask.subtasks || [];
-            let newSub = newTask.subtasks || [];
-            
-            if (oldSub.length !== newSub.length) {
-              needsFullRender = true;
-              break;
-            }
-            
-            for (let j = 0; j < oldSub.length; j++) {
-              let oldSubName = typeof oldSub[j] === 'string' ? oldSub[j] : oldSub[j].name;
-              let newSubName = typeof newSub[j] === 'string' ? newSub[j] : newSub[j].name;
-              if (oldSubName !== newSubName || oldSub[j].done !== newSub[j].done) {
-                needsFullRender = true;
-                break;
-              }
-            }
-            if (needsFullRender) break;
+      if (state.tasks.length !== safeFbTasks.length) {
+        needsTasksRender = true;
+      } else {
+        for (let i = 0; i < state.tasks.length; i++) {
+          let oldTask = state.tasks[i];
+          let newTask = safeFbTasks[i];
+          
+          if (oldTask.name !== newTask.name) {
+            needsTasksRender = true;
+            break;
           }
+          
+          let oldSub = oldTask.subtasks || [];
+          let newSub = newTask.subtasks || [];
+          
+          if (oldSub.length !== newSub.length) {
+            needsTasksRender = true;
+            break;
+          }
+          
+          for (let j = 0; j < oldSub.length; j++) {
+            let oldSubName = typeof oldSub[j] === 'string' ? oldSub[j] : oldSub[j].name;
+            let newSubName = typeof newSub[j] === 'string' ? newSub[j] : newSub[j].name;
+            if (oldSubName !== newSubName || oldSub[j].done !== newSub[j].done) {
+              needsTasksRender = true;
+              break;
+            }
+          }
+          if (needsTasksRender) break;
         }
+      }
+
+      if (state.agenda.length !== safeFbAgenda.length || JSON.stringify(state.agenda) !== JSON.stringify(safeFbAgenda)) {
+        needsAgendaRender = true;
+      }
+
+      if (state.statistics.length !== safeFbStats.length) {
+        needsStatisticsRender = true;
       }
 
       state.timeScales = fbData.timeScales || state.timeScales;
@@ -260,15 +273,21 @@ function setupFirebaseListener() {
         timerWorker.postMessage('stop');
       }
 
-      if (needsFullRender) {
+
+      if (needsTasksRender) {
         RenderTasks();
-        RenderTimeScales();
-        RenderAgenda();
-        RenderStatistics();
       } else {
         UpdateTasksRender();
+      }
+
+      if (needsTimeScalesRender) {
+        RenderTimeScales();
+      } else {
         UpdateTimeScalesRender();
       }
+
+      if (needsAgendaRender) RenderAgenda();
+      if (needsStatisticsRender) RenderStatistics();
     }
   }, (error) => {
     console.error(error);
