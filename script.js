@@ -19,6 +19,8 @@ const analytics = getAnalytics(app);
 const auth = getAuth(app);
 const db = getDatabase(app);
 
+let hasSyncedWithFirebase = false;
+
 onAuthStateChanged(auth, async (user) => {
   let openLoginButton = document.getElementById("btn-open-login")
   let migrateButton = document.getElementById("btn-migrate")
@@ -172,6 +174,7 @@ function setupFirebaseListener() {
   const userRef = ref(db, `users/${user.uid}`);
   
   onValue(userRef, (snapshot) => {
+    hasSyncedWithFirebase = true;
     if (isSavingLocally) {
       isSavingLocally = false; 
       return; 
@@ -188,7 +191,7 @@ function setupFirebaseListener() {
 
       const safeFbTasks = fbData.tasks || [];
       const safeFbScales = fbData.timeScales || [];
-      const safeFbAgenda = fbData.agenda || [];
+      const safeFbAgenda = fbData.agenda ? (Array.isArray(fbData.agenda) ? fbData.agenda : Object.values(fbData.agenda)) : [];
       const safeFbStats = fbData.statistics || [];
       
       if (state.timeScales.length !== safeFbScales.length) {
@@ -256,7 +259,7 @@ function setupFirebaseListener() {
         }));
       }
 
-      state.agenda = fbData.agenda || state.agenda;
+      state.agenda = safeFbAgenda;
       state.statistics = fbData.statistics || state.statistics;
 
       let isRunningNow = state.tasks.find(t => t.running);
@@ -360,7 +363,10 @@ async function Load() {
     };
   });
 
-  let parsedAgenda = rawData.agenda ? JSON.parse(rawData.agenda) : []
+  let parsedAgenda = rawData.agenda ? JSON.parse(rawData.agenda) : [];
+  if (!Array.isArray(parsedAgenda) && typeof parsedAgenda === 'object') {
+    parsedAgenda = Object.values(parsedAgenda);
+  }
   
   state.agenda = parsedAgenda.map(item => {
     if (typeof item === 'number') {
@@ -403,7 +409,7 @@ async function Save(firebase = false) {
   state.agenda = state.agenda.filter((item) => {
     const itemTime = new Date(item.iso).getTime();
     const hasData = item.busy || item.tasksWorked;
-    const isAfterStart = itemTime >= (earliestStart - 2 * 86400); 
+    const isAfterStart = itemTime >= (earliestStart - 2 * 86400 * 1000); 
     
     return hasData && isAfterStart;
   });
@@ -411,6 +417,7 @@ async function Save(firebase = false) {
   const user = auth.currentUser;
   
   if (user && firebase) {
+    if (!hasSyncedWithFirebase) return;
     isSavingLocally = true; 
     try {
       await set(ref(db, `users/${user.uid}`), {
@@ -684,8 +691,6 @@ async function toggleTask(id, UITarget) {
     UpdateTasksRender();
     RenderAgenda();
   } else {
-    await Load();
-    
     task = state.tasks.find((t) => t.id === id);
     taskIndex = state.tasks.findIndex((t) => t.id === id);
     if (!task) return;
@@ -1501,8 +1506,15 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
   });
 }
 
+let lastTick = performance.now();
+
 let timeScalesRenderInterval = setInterval(()=>{
-  UpdateTimeScalesRender()
+  let now = performance.now();
+  if (now - lastTick > 5000) {
+    hasSyncedWithFirebase = false;
+  }
+  lastTick = now;
+  UpdateTimeScalesRender();
 }, 1000);
 
 function resetTimes(){
@@ -1752,6 +1764,7 @@ function buildAgendaSelector() {
 }
 
 function checkTimeScaleDone() {
+  if (!hasSyncedWithFirebase) return false;
   let SomethingChanged = false;
 
   state.timeScales.forEach((scale) => {
@@ -1999,5 +2012,3 @@ window.editTimeScale = editTimeScale;
 window.deleteTimeScale = deleteTimeScale;
 window.openFullStatisticsModal = openFullStatisticsModal;
 window.openModal = openModal;
-
-showLoading()
