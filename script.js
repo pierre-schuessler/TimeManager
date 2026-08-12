@@ -139,9 +139,12 @@ async function migrateToFirebase() {
     const agenda = localAgenda ? JSON.parse(localAgenda) : [];
     const statistics = localStatistics ? JSON.parse(localStatistics) : [];
 
+    let tasksObj = {};
+    tasks.forEach(t => tasksObj[t.id] = t);
+
     await set(ref(db, `users/${user.uid}`), {
       timeScales: timeScales,
-      tasks: tasks,
+      tasks: tasksObj,
       agenda: agenda,
       statistics: statistics
     });
@@ -189,7 +192,7 @@ function setupFirebaseListener() {
       let needsAgendaRender = false;
       let needsStatisticsRender = false;
 
-      const safeFbTasks = fbData.tasks || [];
+      const safeFbTasks = fbData.tasks ? Object.values(fbData.tasks) : [];
       const safeFbScales = fbData.timeScales || [];
       const safeFbAgenda = fbData.agenda ? (Array.isArray(fbData.agenda) ? fbData.agenda : Object.values(fbData.agenda)) : [];
       const safeFbStats = fbData.statistics || [];
@@ -252,7 +255,7 @@ function setupFirebaseListener() {
       state.timeScales = fbData.timeScales || state.timeScales;
       
       if (fbData.tasks) {
-        state.tasks = fbData.tasks.map(task => ({
+        state.tasks = Object.values(fbData.tasks).map(task => ({
           ...task,
           times: task.times || {},
           subtasks: task.subtasks || []
@@ -318,7 +321,7 @@ async function Load() {
         const fbData = snapshot.val();
         
         if (fbData.timeScales) rawData.timeScales = JSON.stringify(fbData.timeScales);
-        if (fbData.tasks) rawData.tasks = JSON.stringify(fbData.tasks);
+        if (fbData.tasks) rawData.tasks = JSON.stringify(Object.values(fbData.tasks));
         if (fbData.agenda) rawData.agenda = JSON.stringify(fbData.agenda);
         if (fbData.statistics) rawData.statistics = JSON.stringify(fbData.statistics);
       }
@@ -420,9 +423,12 @@ async function Save(firebase = false) {
     if (!hasSyncedWithFirebase) return;
     isSavingLocally = true; 
     try {
+      let tasksObj = {};
+      tasksToSave.forEach(t => tasksObj[t.id] = t);
+
       await set(ref(db, `users/${user.uid}`), {
         timeScales: state.timeScales,
-        tasks: tasksToSave,
+        tasks: tasksObj,
         agenda: state.agenda,
         statistics: state.statistics
       });
@@ -678,11 +684,11 @@ async function toggleTask(id, UITarget) {
     if (user && taskIndex !== -1) {
       isSavingLocally = true;
       let updates = { 
-        [`tasks/${taskIndex}/running`]: false,
+        [`tasks/${task.id}/running`]: false,
         [`agenda`]: state.agenda
       };
       state.timeScales.forEach(scale => {
-        updates[`tasks/${taskIndex}/times/${scale.id}/elapsed`] = task.times[scale.id].elapsed;
+        updates[`tasks/${task.id}/times/${scale.id}/elapsed`] = task.times[scale.id].elapsed;
       });
       update(ref(db, `users/${user.uid}`), updates);
     }
@@ -702,11 +708,11 @@ async function toggleTask(id, UITarget) {
         if (user) {
           isSavingLocally = true;
           let updates = { 
-            [`tasks/${idx}/running`]: false,
+            [`tasks/${t.id}/running`]: false,
             [`agenda`]: state.agenda
           };
           state.timeScales.forEach(scale => {
-            updates[`tasks/${idx}/times/${scale.id}/elapsed`] = t.times[scale.id].elapsed;
+            updates[`tasks/${t.id}/times/${scale.id}/elapsed`] = t.times[scale.id].elapsed;
           });
           update(ref(db, `users/${user.uid}`), updates);
         }
@@ -718,7 +724,7 @@ async function toggleTask(id, UITarget) {
     const user = auth.currentUser;
     if (user && taskIndex !== -1) {
       isSavingLocally = true;
-      update(ref(db, `users/${user.uid}/tasks/${taskIndex}`), {
+      update(ref(db, `users/${user.uid}/tasks/${task.id}`), {
         running: true,
         startedAt: serverTimestamp()
       });
@@ -846,7 +852,7 @@ async function editTask(id) {
     const user = auth.currentUser;
     if (user && taskIndex !== -1) {
       isSavingLocally = true;
-      update(ref(db, `users/${user.uid}/tasks/${taskIndex}`), {
+      update(ref(db, `users/${user.uid}/tasks/${task.id}`), {
         name: task.name,
         times: task.times
       });
@@ -912,7 +918,7 @@ function toggleSubtask(taskId, subtaskIndex) {
       let { deleteTimeout, ...cleanSubtask } = st;
       return cleanSubtask;
     });
-    update(ref(db, `users/${user.uid}/tasks/${taskIndex}`), {
+    update(ref(db, `users/${user.uid}/tasks/${task.id}`), {
       subtasks: cleanSubtasks
     });
     Save(false);
