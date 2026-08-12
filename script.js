@@ -1457,7 +1457,7 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
 
     const freeTimeUsedMs = Math.max(0, timeUsed - rawElapsedMs);
 
-    const initialFreeTimeMs = Math.max(0, currentFreeTimeMs) + freeTimeUsedMs;
+    const initialFreeTimeMs = currentFreeTimeMs + freeTimeUsedMs;
 
     const freeTimeUsedPercentage = initialFreeTimeMs > 0
       ? Math.min(100, Math.max(0, (freeTimeUsedMs / initialFreeTimeMs) * 100))
