@@ -28,21 +28,6 @@ let state = {
   statistics: {}
 }
 
-const parseToObject = (data, keyProp = 'id') => {
-  if (!data) return {};
-  let parsed = typeof data === 'string' ? JSON.parse(data) : data;
-  if (Array.isArray(parsed)) {
-    return parsed.reduce((acc, item, index) => {
-      let key = item[keyProp] || crypto.randomUUID();
-      if (!item[keyProp]) item[keyProp] = key;
-      item.order = item.order ?? index; 
-      acc[key] = item;
-      return acc;
-    }, {});
-  }
-  return parsed;
-};
-
 onAuthStateChanged(auth, async (user) => {
   let openLoginButton = document.getElementById("btn-open-login")
   let migrateButton = document.getElementById("btn-migrate")
@@ -146,42 +131,19 @@ async function migrateToFirebase() {
       return;
     }
 
-    let loadedScales = parseToObject(localTimeScales);
-    let loadedTasks = parseToObject(localTasks);
+    let loadedScales = localTimeScales ? JSON.parse(localTimeScales) : {};
+    let loadedTasks = localTasks ? JSON.parse(localTasks) : {};
     
     Object.values(loadedTasks).forEach(task => {
       if (!task.times) task.times = {};
       Object.keys(loadedScales).forEach(scaleId => {
         if (!task.times[scaleId]) task.times[scaleId] = { elapsed: 0, goal: 3600 };
       });
-      
-      if (Array.isArray(task.subtasks)) {
-        task.subtasks = task.subtasks.reduce((acc, sub) => {
-          let sid = crypto.randomUUID();
-          acc[sid] = typeof sub === 'string' ? { id: sid, name: sub, done: false } : { id: sid, ...sub };
-          return acc;
-        }, {});
-      } else if (!task.subtasks) {
-        task.subtasks = {};
-      }
+      if (!task.subtasks) task.subtasks = {};
     });
 
-    let loadedAgenda = {};
-    if (localAgenda) {
-      let parsedAgenda = JSON.parse(localAgenda);
-      if (Array.isArray(parsedAgenda)) {
-        loadedAgenda = parsedAgenda.reduce((acc, item) => {
-          if (typeof item === 'object' && item !== null && item.iso) {
-            acc[item.iso] = item;
-          }
-          return acc;
-        }, {});
-      } else {
-        loadedAgenda = parsedAgenda;
-      }
-    }
-
-    let loadedStatistics = parseToObject(localStatistics);
+    let loadedAgenda = localAgenda ? JSON.parse(localAgenda) : {};
+    let loadedStatistics = localStatistics ? JSON.parse(localStatistics) : {};
 
     await set(ref(db, `users/${user.uid}`), {
       timeScales: loadedScales,
@@ -230,7 +192,17 @@ function setupFirebaseListener() {
       let needsStatisticsRender = true;
 
       state.timeScales = fbData.timeScales || {};
-      state.tasks = fbData.tasks || {};
+      
+      let incomingTasks = fbData.tasks || {};
+      Object.values(incomingTasks).forEach(task => {
+        if (!task.times) task.times = {};
+        Object.keys(state.timeScales).forEach(scaleId => {
+          if (!task.times[scaleId]) task.times[scaleId] = { elapsed: 0, goal: 3600 };
+        });
+        if (!task.subtasks) task.subtasks = {};
+      });
+      state.tasks = incomingTasks;
+      
       state.agenda = fbData.agenda || {};
       state.statistics = fbData.statistics || {};
 
@@ -286,49 +258,23 @@ async function Load() {
   let todayMidnight = new Date();
   todayMidnight.setHours(0, 0, 0, 0);
 
-  let loadedScales = parseToObject(rawData.timeScales);
-  if (Object.keys(loadedScales).length === 0) {
+  state.timeScales = rawData.timeScales ? JSON.parse(rawData.timeScales) : {};
+  if (Object.keys(state.timeScales).length === 0) {
     const id = crypto.randomUUID();
-    loadedScales[id] = { id: id, name: "Daily", duration: 1, start: todayMidnight.toISOString() };
+    state.timeScales[id] = { id: id, name: "Daily", duration: 1, start: todayMidnight.toISOString() };
   }
-  state.timeScales = loadedScales;
 
-  let loadedTasks = parseToObject(rawData.tasks);
-  Object.values(loadedTasks).forEach(task => {
+  state.tasks = rawData.tasks ? JSON.parse(rawData.tasks) : {};
+  Object.values(state.tasks).forEach(task => {
     if (!task.times) task.times = {};
     Object.keys(state.timeScales).forEach(scaleId => {
       if (!task.times[scaleId]) task.times[scaleId] = { elapsed: 0, goal: 3600 };
     });
-    
-    if (Array.isArray(task.subtasks)) {
-      task.subtasks = task.subtasks.reduce((acc, sub) => {
-        let sid = crypto.randomUUID();
-        acc[sid] = typeof sub === 'string' ? { id: sid, name: sub, done: false } : { id: sid, ...sub };
-        return acc;
-      }, {});
-    } else if (!task.subtasks) {
-      task.subtasks = {};
-    }
+    if (!task.subtasks) task.subtasks = {};
   });
-  state.tasks = loadedTasks;
 
-  if (rawData.agenda) {
-    let parsedAgenda = JSON.parse(rawData.agenda);
-    if (Array.isArray(parsedAgenda)) {
-      state.agenda = parsedAgenda.reduce((acc, item) => {
-        if (typeof item === 'object' && item !== null && item.iso) {
-          acc[item.iso] = item;
-        }
-        return acc;
-      }, {});
-    } else {
-      state.agenda = parsedAgenda;
-    }
-  } else {
-    state.agenda = {};
-  }
-
-  state.statistics = parseToObject(rawData.statistics);
+  state.agenda = rawData.agenda ? JSON.parse(rawData.agenda) : {};
+  state.statistics = rawData.statistics ? JSON.parse(rawData.statistics) : {};
 }
 
 async function Save(firebase = false) {
@@ -563,6 +509,8 @@ async function toggleTask(id, UITarget) {
         [`agenda`]: state.agenda
       };
       Object.keys(state.timeScales).forEach(scaleId => {
+        if (!task.times) task.times = {};
+        if (!task.times[scaleId]) task.times[scaleId] = { elapsed: 0, goal: 3600 };
         updates[`tasks/${task.id}/times/${scaleId}/elapsed`] = task.times[scaleId].elapsed;
       });
       update(ref(db, `users/${user.uid}`), updates);
@@ -584,6 +532,8 @@ async function toggleTask(id, UITarget) {
             [`agenda`]: state.agenda
           };
           Object.keys(state.timeScales).forEach(scaleId => {
+            if (!t.times) t.times = {};
+            if (!t.times[scaleId]) t.times[scaleId] = { elapsed: 0, goal: 3600 };
             updates[`tasks/${t.id}/times/${scaleId}/elapsed`] = t.times[scaleId].elapsed;
           });
           update(ref(db, `users/${user.uid}`), updates);
@@ -644,12 +594,12 @@ async function editTask(id) {
     </div>
     ${
       Object.values(state.timeScales).map((scale) => {
-        const elapsedSecs = task.times[scale.id].elapsed || 0;
+        const elapsedSecs = task.times[scale.id]?.elapsed || 0;
         const eh = Math.floor(elapsedSecs / 3600);
         const em = Math.floor((elapsedSecs % 3600) / 60);
         const es = elapsedSecs % 60;
 
-        const goalSecs = task.times[scale.id].goal || 0;
+        const goalSecs = task.times[scale.id]?.goal || 0;
         const gh = Math.floor(goalSecs / 3600);
         const gm = Math.floor((goalSecs % 3600) / 60);
         const gs = goalSecs % 60;
@@ -790,7 +740,7 @@ function RenderTasks() {
               </div>
               <div class="subtask-area" style="margin: 15px 0;">
                 <div class="task" style="text-align: center; cursor: pointer; padding: 5px; font-size: 0.9em; margin-bottom: 10px;" onclick="createNewSubtask('${task.id}')">+ New subtask</div>
-                ${Object.values(task.subtasks || {}).map((subtask)=>{
+                ${Object.values(task.subtasks).map((subtask)=>{
                   let isChecked = subtask.done ? 'checked' : '';
                   let textStyle = subtask.done ? 'text-decoration: line-through; opacity: 0.6;' : '';
                   let classname = subtask.done ? "task subtask-done" : "task";
@@ -802,7 +752,7 @@ function RenderTasks() {
               </div>
               <div class="task-progress-list">
                 ${Object.values(state.timeScales).map((scale)=>{
-                  if (task.times[scale.id].goal <= 0) return "";
+                  if (!task.times[scale.id] || task.times[scale.id].goal <= 0) return "";
                   const progress = !firstRender ? (task.times[scale.id].elapsed / task.times[scale.id].goal) * 100 : 0;
                   return `
                     <div class="task-progress-row">
@@ -842,7 +792,7 @@ function UpdateTasksRender() {
 
     progressRows.forEach((row, scaleIndex) => {
       let scale = scalesArray[scaleIndex];
-      if (!scale) return;
+      if (!scale || !task.times[scale.id]) return;
 
       const progress = task.times[scale.id].goal > 0 ? (task.times[scale.id].elapsed / task.times[scale.id].goal) * 100 : 0;
       let metaSpans = row.querySelectorAll(".task-progress-meta span");
@@ -863,6 +813,7 @@ function addTimeScale() {
 
   let runningTask = null;
   Object.values(state.tasks).forEach((task) => {
+    if (!task.times) task.times = {};
     task.times[newScaleId] = { elapsed: 0, goal: 3600 };
     if (task.running) runningTask = task;
   });
@@ -1324,8 +1275,6 @@ function checkTimeScaleDone() {
     const scaleDurationMs = scale.duration * 24 * 60 * 60 * 1000;
     
     if (new Date(scale.start).getTime() + scaleDurationMs < new Date().getTime()) {
-      console.log(`Time scale reset for "${scale.name}".`);
-
       const totals = Object.values(state.tasks).reduce((acc, task) => {
         acc.elapsed += Number(task.times[scale.id]?.elapsed) || 0; 
         acc.goal += Number(task.times[scale.id]?.goal) || 0;
