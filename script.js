@@ -140,7 +140,10 @@ async function migrateToFirebase() {
     const statistics = localStatistics ? JSON.parse(localStatistics) : [];
 
     let tasksObj = {};
-    tasks.forEach(t => tasksObj[t.id] = t);
+    tasks.forEach((t, index) => {
+      t.order = index;
+      tasksObj[t.id] = t;
+    });
 
     await set(ref(db, `users/${user.uid}`), {
       timeScales: timeScales,
@@ -192,7 +195,7 @@ function setupFirebaseListener() {
       let needsAgendaRender = false;
       let needsStatisticsRender = false;
 
-      const safeFbTasks = fbData.tasks ? Object.values(fbData.tasks) : [];
+      const safeFbTasks = fbData.tasks ? Object.values(fbData.tasks).sort((a, b) => (a.order || 0) - (b.order || 0)) : [];
       const safeFbScales = fbData.timeScales || [];
       const safeFbAgenda = fbData.agenda ? (Array.isArray(fbData.agenda) ? fbData.agenda : Object.values(fbData.agenda)) : [];
       const safeFbStats = fbData.statistics || [];
@@ -255,11 +258,13 @@ function setupFirebaseListener() {
       state.timeScales = fbData.timeScales || state.timeScales;
       
       if (fbData.tasks) {
-        state.tasks = Object.values(fbData.tasks).map(task => ({
-          ...task,
-          times: task.times || {},
-          subtasks: task.subtasks || []
-        }));
+        state.tasks = Object.values(fbData.tasks)
+          .sort((a, b) => (a.order || 0) - (b.order || 0))
+          .map(task => ({
+            ...task,
+            times: task.times || {},
+            subtasks: task.subtasks || []
+          }));
       }
 
       state.agenda = safeFbAgenda;
@@ -321,7 +326,10 @@ async function Load() {
         const fbData = snapshot.val();
         
         if (fbData.timeScales) rawData.timeScales = JSON.stringify(fbData.timeScales);
-        if (fbData.tasks) rawData.tasks = JSON.stringify(Object.values(fbData.tasks));
+        if (fbData.tasks) {
+          let sortedTasks = Object.values(fbData.tasks).sort((a, b) => (a.order || 0) - (b.order || 0));
+          rawData.tasks = JSON.stringify(sortedTasks);
+        }
         if (fbData.agenda) rawData.agenda = JSON.stringify(fbData.agenda);
         if (fbData.statistics) rawData.statistics = JSON.stringify(fbData.statistics);
       }
@@ -424,7 +432,10 @@ async function Save(firebase = false) {
     isSavingLocally = true; 
     try {
       let tasksObj = {};
-      tasksToSave.forEach(t => tasksObj[t.id] = t);
+      tasksToSave.forEach((t, index) => {
+        t.order = index;
+        tasksObj[t.id] = t;
+      });
 
       await set(ref(db, `users/${user.uid}`), {
         timeScales: state.timeScales,
