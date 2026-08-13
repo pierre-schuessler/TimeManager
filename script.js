@@ -790,7 +790,7 @@ function RenderTasks() {
               </div>
               <div class="subtask-area" style="margin: 15px 0;">
                 <div class="task" style="text-align: center; cursor: pointer; padding: 5px; font-size: 0.9em; margin-bottom: 10px;" onclick="createNewSubtask('${task.id}')">+ New subtask</div>
-                ${Object.values(task.subtasks).map((subtask)=>{
+                ${Object.values(task.subtasks || {}).map((subtask)=>{
                   let isChecked = subtask.done ? 'checked' : '';
                   let textStyle = subtask.done ? 'text-decoration: line-through; opacity: 0.6;' : '';
                   let classname = subtask.done ? "task subtask-done" : "task";
