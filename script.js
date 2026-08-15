@@ -28,6 +28,10 @@ let state = {
   statistics: {}
 }
 
+function getSafeIsoString(date) {
+  return date.toISOString().split('.')[0] + 'Z';
+}
+
 onAuthStateChanged(auth, async (user) => {
   let openLoginButton = document.getElementById("btn-open-login")
   let migrateButton = document.getElementById("btn-migrate")
@@ -273,7 +277,14 @@ async function Load() {
     if (!task.subtasks) task.subtasks = {};
   });
 
-  state.agenda = rawData.agenda ? JSON.parse(rawData.agenda) : {};
+  let rawAgenda = rawData.agenda ? JSON.parse(rawData.agenda) : {};
+  state.agenda = {};
+  Object.entries(rawAgenda).forEach(([iso, item]) => {
+    let safeIso = iso.includes('.') ? iso.split('.')[0] + 'Z' : iso;
+    item.iso = safeIso;
+    state.agenda[safeIso] = item;
+  });
+
   state.statistics = rawData.statistics ? JSON.parse(rawData.statistics) : {};
 }
 
@@ -381,7 +392,7 @@ function catchUpLocalAgenda() {
     if (timeMarker === slotStartTime) { timeMarker -= 1; continue; } 
     else { timeInThisSlot = Math.min(timeRemaining, timeMarker - slotStartTime); }
     
-    let currentSlotIso = slotStart.toISOString();
+    let currentSlotIso = getSafeIsoString(slotStart);
     
     if (!state.agenda[currentSlotIso]) {
       state.agenda[currentSlotIso] = { iso: currentSlotIso, busy: false, tasksWorked: {} };
@@ -424,7 +435,7 @@ timerWorker.onmessage = function(e) {
       if (timeMarker === slotStartTime) { timeMarker -= 1; continue; } 
       else { timeInThisSlot = Math.min(timeRemaining, timeMarker - slotStartTime); }
       
-      let currentSlotIso = slotStart.toISOString();
+      let currentSlotIso = getSafeIsoString(slotStart);
       
       if (!state.agenda[currentSlotIso]) {
         state.agenda[currentSlotIso] = { iso: currentSlotIso, busy: false, tasksWorked: {} };
@@ -1155,7 +1166,7 @@ function RenderAgenda() {
 
           for (let j = 0; j < longestScaleLengthDays; j++) {
             const timestamp = getTimestamp(j, i);
-            const isoString = new Date(timestamp).toISOString();
+            const isoString = getSafeIsoString(new Date(timestamp));
             const isToday = new Date(timestamp).toDateString() === todayStr;
             
             const agendaItem = state.agenda[isoString];
