@@ -318,7 +318,16 @@ async function Save(firebase = false) {
   const user = auth.currentUser;
   
   if (user && firebase) {
-    if (!hasSyncedWithFirebase) return;
+    if (!hasSyncedWithFirebase)
+    {
+        document.getElementById("modal-title").innerText = "You are out of sync with the database";
+        document.getElementById("modal-body").innerHTML = `<p>It seems you have been disconnected from the database for a while. To prevent data loss, you will need to reload the page and try again.</p><p>Please be aware that your last change was not saved.</p>`;
+        document.getElementById("btn-submit").innerText = "Reload";
+        document.getElementById("modal-cancel").style.display = "none";
+        document.querySelector(".close-btn").style.display = "none";
+        document.getElementById("btn-submit").onclick = function() { location.reload() };
+        openModal("modal");
+    };
     isSavingLocally = true; 
     try {
       await set(ref(db, `users/${user.uid}`), {
