@@ -180,7 +180,7 @@ function setupFirebaseListener() {
   const userRef = ref(db, `users/${user.uid}`);
   
   onValue(userRef, (snapshot) => {
-    hasSyncedWithFirebase = true;
+    
     if (isSavingLocally) {
       isSavingLocally = false; 
       return; 
@@ -229,6 +229,7 @@ function setupFirebaseListener() {
       if (needsAgendaRender) RenderAgenda();
       if (needsStatisticsRender) RenderStatistics();
     }
+    hasSyncedWithFirebase = true;
   }, (error) => {
     console.error(error);
   });
