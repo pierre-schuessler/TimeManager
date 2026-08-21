@@ -191,11 +191,16 @@ function setupFirebaseListener() {
       let wasRunning = Object.values(state.tasks).find(t => t.running);
       
       let needsTasksRender = true;
-      let needsTimeScalesRender = true;
       let needsAgendaRender = true;
       let needsStatisticsRender = true;
+      
+      const incomingTimeScales = fbData.timeScales || {};
+      let needsTimeScalesRender = JSON.stringify(state.timeScales) !== JSON.stringify(incomingTimeScales);
+      state.timeScales = incomingTimeScales;
 
-      state.timeScales = fbData.timeScales || {};
+      
+
+      
       
       let incomingTasks = fbData.tasks || {};
       Object.values(incomingTasks).forEach(task => {
