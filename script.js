@@ -781,7 +781,7 @@ function RenderTasks() {
                   if (!task.times[scale.id] || task.times[scale.id].goal <= 0) return "";
                   const progress = !firstRender ? (task.times[scale.id].elapsed / task.times[scale.id].goal) * 100 : 0;
                   return `
-                    <div class="task-progress-row">
+                    <div class="task-progress-row" data-scale-id="${scale.id}">
                       <div class="task-progress-meta">
                         <span>${scale.name}</span>
                         <span>${progress.toFixed(1)}%</span>
@@ -814,10 +814,10 @@ function UpdateTasksRender() {
     if (task.running) taskContainer.classList.add("active"); else taskContainer.classList.remove("active");
 
     let progressRows = taskContainer.querySelectorAll(".task-progress-row");
-    const scalesArray = Object.values(state.timeScales);
 
-    progressRows.forEach((row, scaleIndex) => {
-      let scale = scalesArray[scaleIndex];
+    progressRows.forEach((row) => {
+      let scaleId = row.getAttribute("data-scale-id");
+      let scale = state.timeScales[scaleId];
       if (!scale || !task.times[scale.id]) return;
 
       const progress = task.times[scale.id].goal > 0 ? (task.times[scale.id].elapsed / task.times[scale.id].goal) * 100 : 0;
