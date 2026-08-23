@@ -1294,34 +1294,49 @@ function buildAgendaSelector() {
 function checkTimeScaleDone() {
   if (!hasSyncedWithFirebase) return false;
   let SomethingChanged = false;
+  let nowMs = new Date().getTime();
 
   Object.values(state.timeScales).forEach((scale) => {
     const scaleDurationMs = scale.duration * 24 * 60 * 60 * 1000;
+    let scaleStartMs = new Date(scale.start).getTime();
     
-    if (new Date(scale.start).getTime() + scaleDurationMs < new Date().getTime()) {
-      const totals = Object.values(state.tasks).reduce((acc, task) => {
-        acc.elapsed += Number(task.times[scale.id]?.elapsed) || 0; 
-        acc.goal += Number(task.times[scale.id]?.goal) || 0;
-        return acc;
-      }, { elapsed: 0, goal: 0 });
-
-      const statId = crypto.randomUUID();
-      state.statistics[statId] = {
-        id: statId,
-        scaleId: scale.id,
-        name: scale.name,
-        timeWorked: totals.elapsed,
-        goal: totals.goal,
-        duration: scale.duration,
-        start: scale.start,
-        tasks: Object.values(state.tasks).map((task)=>{
-          return { id: task.id, name: task.name, elapsed: task.times[scale.id].elapsed, goal: task.times[scale.id].goal }
-        })
-      };
-
-      let newDate = new Date(); newDate.setHours(0,0,0,0);
-      scale.start = newDate.toISOString();
+    if (scaleStartMs + scaleDurationMs <= nowMs) {
       SomethingChanged = true;
+      let isFirstMissedCycle = true;
+
+      while (scaleStartMs + scaleDurationMs <= nowMs) {
+        const totals = Object.values(state.tasks).reduce((acc, task) => {
+          acc.elapsed += isFirstMissedCycle ? (Number(task.times[scale.id]?.elapsed) || 0) : 0; 
+          acc.goal += Number(task.times[scale.id]?.goal) || 0;
+          return acc;
+        }, { elapsed: 0, goal: 0 });
+
+        const statId = crypto.randomUUID();
+        state.statistics[statId] = {
+          id: statId,
+          scaleId: scale.id,
+          name: scale.name,
+          timeWorked: totals.elapsed,
+          goal: totals.goal,
+          duration: scale.duration,
+          start: new Date(scaleStartMs).toISOString(),
+          tasks: Object.values(state.tasks).map((task) => {
+            return { 
+              id: task.id, 
+              name: task.name, 
+              elapsed: isFirstMissedCycle ? (task.times[scale.id]?.elapsed || 0) : 0, 
+              goal: task.times[scale.id]?.goal || 0 
+            }
+          })
+        };
+
+        scaleStartMs += scaleDurationMs;
+        isFirstMissedCycle = false;
+      }
+
+      let finalDate = new Date(scaleStartMs);
+      finalDate.setHours(0, 0, 0, 0);
+      scale.start = finalDate.toISOString();
       
       let runningTask = null;
       Object.values(state.tasks).forEach((task) => {
@@ -1336,7 +1351,13 @@ function checkTimeScaleDone() {
     }
   });
 
-  if (SomethingChanged) { Save(true); RenderTasks(); RenderTimeScales(); RenderAgenda(); }
+  if (SomethingChanged) { 
+    Save(true); 
+    RenderTasks(); 
+    RenderTimeScales(); 
+    RenderAgenda(); 
+  }
+  
   return SomethingChanged;
 }
 
