@@ -1346,28 +1346,29 @@ function openTimeScaleStatistics(scaleId) {
     .filter(stat => stat.scaleId === scaleId)
     .sort((a, b) => new Date(a.start) - new Date(b.start));
   
-  /*
-  const scaleStats = Array.from({ length: 365 }, (_, i) => { 
-    const wave = Math.sin(i / 2.5) * 0.4 + 0.5; 
-    const randomFactor = Math.random() * 0.3 - 0.1; 
-    const completion = Math.max(0, Math.min(1.2, wave + randomFactor)); 
-    
-    const elapsed = Math.round(3600 * completion);
-    const date = new Date(Date.UTC(2026, 7, i + 1)); 
-
-    return { 
-      name: "Monthly Test Scale", 
-      start: date.toISOString(), 
-      duration: 1, 
-      tasks: [
-        { name: "Deep Work", elapsed: elapsed, goal: 3600 },
-        { name: "Emails & Admin", elapsed: Math.round(1800 * Math.random()), goal: 1800 }
-      ] 
-    };
-  }).sort((a, b) => new Date(a.start) - new Date(b.start));
-  */
   
-  if (scaleStats.length === 0) {
+  const currentScale = state.timeScales[scaleId];
+  if (currentScale) {
+    scaleStats.push({
+      id: 'preview',
+      scaleId: currentScale.id,
+      name: currentScale.name + " (Ongoing)",
+      duration: currentScale.duration,
+      start: currentScale.start,
+      isPreview: true,
+      tasks: Object.values(state.tasks).map(task => {
+        return { 
+          id: task.id, 
+          name: task.name, 
+          elapsed: task.times[scaleId]?.elapsed || 0, 
+          goal: task.times[scaleId]?.goal || 0 
+        };
+      })
+    });
+  }
+ 
+  
+  if (scaleStats.length === 1 && scaleStats[0].isPreview) {
     document.getElementById("modal-title").innerText = "Statistics";
     document.getElementById("modal-body").innerHTML = `
       <div style="text-align: center; color: #666; padding: 30px 10px;">
@@ -1377,7 +1378,7 @@ function openTimeScaleStatistics(scaleId) {
     `;
   } else {
     const STATS_PER_ROW = 14;
-    const scaleName = scaleStats[0].name;
+    const scaleName = currentScale ? currentScale.name : scaleStats[0].name;
     document.getElementById("modal-title").innerText = `Statistics for ${scaleName}`;
 
     const remainder = scaleStats.length % STATS_PER_ROW;
@@ -1415,12 +1416,17 @@ function openTimeScaleStatistics(scaleId) {
             let percentage = totals.goal > 0 ? (totals.elapsed / totals.goal) * 100 : 100;
             let clampedPercentage = Math.min(100, Math.max(0, percentage));
             let hue = (clampedPercentage / 100) * 120;
+            
+            
+            let borderStyle = stat.isPreview ? "dashed" : "solid";
+            let borderColor = percentage >= 100 ? "hsl(120, 100%, 45%)" : "hsl(0, 100%, 45%)";
+            let opacity = stat.isPreview ? "0.6" : "1";
 
             return `
               <div 
               class="heatmap-square time-scale" 
               data-index="${index}"
-              style="margin: 0; border-radius: 6px; border: 2px solid ${percentage >= 100 ? "hsl(120, 100%, 45%)" : "hsl(0, 100%, 45%)"}; background-color: hsl(${hue}, 100%, 45%); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15); aspect-ratio: 1;">
+              style="margin: 0; border-radius: 6px; border: 2px ${borderStyle} ${borderColor}; background-color: hsl(${hue}, 100%, 45%); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15); aspect-ratio: 1; opacity: ${opacity};">
               </div>
             `
           }).join("")
@@ -1522,7 +1528,7 @@ function openTimeScaleStatistics(scaleId) {
     });
   }
 
-  
+
   document.getElementById("modal-cancel").style.display = "none";
   document.getElementById("btn-submit").innerText = "Close";
   document.getElementById("btn-submit").onclick = function() { 
