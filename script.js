@@ -1420,7 +1420,7 @@ function openTimeScaleStatistics(scaleId) {
               <div 
               class="heatmap-square time-scale" 
               data-index="${index}"
-              style="margin: 0; border-radius: 6px; background-color: hsl(${hue}, 100%, 45%); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15); aspect-ratio: 1;">
+              style="margin: 0; border-radius: 6px; border: 2px solid ${percentage >= 100 ? "green" : "red"}; background-color: hsl(${hue}, 100%, 45%); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15); aspect-ratio: 1;">
               </div>
             `
           }).join("")
