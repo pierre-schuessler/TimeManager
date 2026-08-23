@@ -60,7 +60,7 @@ main {
     grid-template-areas:
         "tasks time-scale"
         "tasks agenda"
-        "statistics agenda";
+        "tasks agenda";
     grid-template-columns: 1fr 1fr;
     gap: var(--spacing-xl);
     margin: var(--spacing-xl) 0px;
@@ -87,9 +87,7 @@ footer {
     -webkit-overflow-scrolling: touch;
 }
 
-#root-statistics {
-    grid-area: statistics;
-}
+
 
 #root-time-scale {
     grid-area: time-scale;

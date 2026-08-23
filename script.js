@@ -65,7 +65,6 @@ onAuthStateChanged(auth, async (user) => {
   RenderTasks();
   RenderTimeScales();
   RenderAgenda();
-  RenderStatistics();
   
   openLoginButton.style.display = "";
   hideLoading();
@@ -162,7 +161,6 @@ async function migrateToFirebase() {
     RenderTasks();
     RenderTimeScales();
     RenderAgenda();
-    RenderStatistics();
 
   } catch (error) {
     console.error("Error migrating data to Firebase:", error);
@@ -192,7 +190,7 @@ function setupFirebaseListener() {
       
       let needsTasksRender = true;
       let needsAgendaRender = true;
-      let needsStatisticsRender = true;
+      
       
       const incomingTimeScales = fbData.timeScales || {};
       let needsTimeScalesRender = JSON.stringify(state.timeScales) !== JSON.stringify(incomingTimeScales);
@@ -232,7 +230,6 @@ function setupFirebaseListener() {
       if (needsTasksRender) RenderTasks();
       if (needsTimeScalesRender) RenderTimeScales();
       if (needsAgendaRender) RenderAgenda();
-      if (needsStatisticsRender) RenderStatistics();
     }
     hasSyncedWithFirebase = true;
   }, (error) => {
@@ -1339,96 +1336,10 @@ function checkTimeScaleDone() {
     }
   });
 
-  if (SomethingChanged) { Save(true); RenderTasks(); RenderTimeScales(); RenderAgenda(); RenderStatistics(); }
+  if (SomethingChanged) { Save(true); RenderTasks(); RenderTimeScales(); RenderAgenda(); }
   return SomethingChanged;
 }
 
-function openFullStatisticsModal() {
-  document.getElementById("modal-title").innerText = "Full Statistics";
-  document.getElementById("modal-body").innerHTML = `<div id="modal-statistics-container" style="max-height: 60vh; overflow-y: auto;"></div>`;
-  document.getElementById("modal-cancel").style.display = "none";
-  document.getElementById("btn-submit").innerText = "Close";
-  document.getElementById("btn-submit").onclick = function() { closeModal("modal"); };
-  openModal("modal");
-  RenderStatistics(document.getElementById("modal-statistics-container"), true);
-}
-
-function RenderStatistics(container = document.getElementById("root-statistics"), full = false) {
-  if (!container) return;
-  const statsArray = Object.values(state.statistics);
-
-  if (statsArray.length === 0) {
-    container.innerHTML = `
-      <h3>Statistics</h3>
-      <div style="text-align: center; color: #666; margin-top: 20px; padding: 20px; border: 1px dashed #ccc; border-radius: 8px;">
-        No statistics available yet. Complete a time scale to see your history.
-      </div>
-    `;
-    return;
-  }
-
-  const sortedStats = statsArray.sort((a,b) => new Date(b.start) - new Date(a.start));
-
-  let displayStats = sortedStats;
-  if (!full) {
-    const counts = {};
-    displayStats = sortedStats.filter((stat) => {
-      counts[stat.scaleId] = (counts[stat.scaleId] || 0) + 1;
-      return counts[stat.scaleId] <= 2;
-    });
-  }
-
-  container.innerHTML = `
-    ${!full ? '<h3>Statistics</h3>' : ''}
-    <div id="statistics-list-container">
-      ${displayStats.map((stat) => {
-        const start = new Date(stat.start);
-        let end = new Date(start.getTime() + (stat.duration - 1) * 24 * 60 * 60 * 1000);
-        const dateRange = `${start.toLocaleDateString('en-GB')}${stat.duration == 1 ? "" : `- ${end.toLocaleDateString('en-GB')}`}`;
-        
-        const cappedTotalWorked = stat.tasks.reduce((sum, task) => sum + Math.min(Number(task.elapsed) || 0, Number(task.goal) || 0), 0);
-        const totalProgress = stat.goal > 0 ? (cappedTotalWorked / stat.goal) * 100 : 100;
-
-        return `
-          <div class="time-scale" style="margin-bottom: 20px; opacity: 0.9;">
-            <div class="time-scale-header">
-              <h3>${stat.name} [${dateRange}]</h3>
-              <div style="font-size: 0.85em; color: #666; text-align: right;">(${stat.duration} day${stat.duration > 1 ? 's' : ''})</div>
-            </div>
-            
-            <div class="time-scale-progress-section" style="margin-top: 10px;">
-              <div class="time-scale-progress-block">
-                <div class="time-scale-progress-meta">
-                  <span>Total Completion</span><span>${totalProgress.toFixed(1)}%</span><span>${formatDuration(cappedTotalWorked * 1000)} / ${formatDuration(stat.goal * 1000)}</span>
-                </div>
-                <div class="progress-bar" style="background-color: red">
-                  <div class="progress-bar-fill" style="width: ${Math.min(100, totalProgress)}%;"></div>
-                </div>
-              </div>
-            </div>
-
-            <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">
-              <h4 style="margin: 0 0 10px 0; font-size: 0.9em; color: #555;">Task Breakdown</h4>
-              <div class="task-progress-list" style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));">
-                ${stat.tasks.map(task => {
-                  if (task.goal <= 0) return "";
-                  const taskProgress = task.goal > 0 ? (task.elapsed / task.goal) * 100 : 0;
-                  return `
-                    <div class="task-progress-row">
-                      <div class="task-progress-meta"><span>${task.name}</span><span>${taskProgress.toFixed(1)}%</span><span>${formatDuration(task.elapsed * 1000)} / ${formatDuration(task.goal * 1000)}</span></div>
-                      <div class="progress-bar task-progress-bar" style="background-color: red"><div class="progress-bar-fill" style="width: ${Math.min(100, taskProgress)}%;"></div></div>
-                    </div>
-                  `;
-                }).join("")}
-              </div>
-            </div>
-          </div>
-        `;
-      }).join("")}
-      ${!full ? `<div class="time-scale" style="text-align: center; cursor: pointer;" onclick="openFullStatisticsModal()">View Full Statistics</div>` : ''}
-    </div>
-  `;
-}
 
 function openTimeScaleStatistics(scaleId) {
   const scaleStats = Object.values(state.statistics)
