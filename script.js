@@ -943,6 +943,7 @@ function RenderTimeScales(agendaData = state.agenda) {
                 </svg>
                 <span class="streak-number">${streakCount}</span>
               </div>
+              <div onclick="openTimeScaleStatistics('${scale.id}')" class="stats-icon" style="cursor: pointer;">📊</div>
               <div onclick="editTimeScale('${scale.id}')" class="edit-icon" style="cursor: pointer;">⚙</div>
             </div>
             <div>Duration: ${scale.duration} day${scale.duration !== 1 ? "s" : ""}</div>
@@ -1429,6 +1430,197 @@ function RenderStatistics(container = document.getElementById("root-statistics")
   `;
 }
 
+function openTimeScaleStatistics(scaleId) {
+  const scaleStats = Object.values(state.statistics).filter(stat => stat.scaleId === scaleId);
+  /*
+  const scaleStats = Array.from({ length: 365 }, (_, i) => { 
+    const wave = Math.sin(i / 2.5) * 0.4 + 0.5; 
+    const randomFactor = Math.random() * 0.3 - 0.1; 
+    const completion = Math.max(0, Math.min(1.2, wave + randomFactor)); 
+    
+    const elapsed = Math.round(3600 * completion);
+    const date = new Date(Date.UTC(2026, 7, i + 1)); 
+
+    return { 
+      name: "Monthly Test Scale", 
+      start: date.toISOString(), 
+      duration: 1, 
+      tasks: [
+        { name: "Deep Work", elapsed: elapsed, goal: 3600 },
+        { name: "Emails & Admin", elapsed: Math.round(1800 * Math.random()), goal: 1800 }
+      ] 
+    };
+  });
+  */
+  
+  
+  if (scaleStats.length === 0) {
+    document.getElementById("modal-title").innerText = "Statistics";
+    document.getElementById("modal-body").innerHTML = `
+      <div style="text-align: center; color: #666; padding: 30px 10px;">
+        <div style="font-size: 2em; margin-bottom: 10px;">📊</div>
+        No statistics available yet.<br>Complete a cycle for this time scale to see your history!
+      </div>
+    `;
+  } else {
+    const STATS_PER_ROW = 14;
+    const scaleName = scaleStats[0].name;
+    document.getElementById("modal-title").innerText = `Statistics for ${scaleName}`;
+
+    const remainder = scaleStats.length % STATS_PER_ROW;
+    const emptySlotsCount = remainder === 0 ? 0 : STATS_PER_ROW - remainder;
+
+    const styleBlock = `
+      <style>
+        .heatmap-square { cursor: pointer; transition: transform 0.1s; }
+        .heatmap-square:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0,0,0,0.3); z-index: 10; }
+        
+        #global-heatmap-tooltip {
+          position: fixed; pointer-events: none; z-index: 99999;
+          background: #fff; border: 1px solid #ccc; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+          width: 280px; padding: 15px; border-radius: 8px;
+          color: #333; text-align: left; opacity: 0; transition: opacity 0.15s ease;
+        }
+        
+        .tt-progress-bar { width: 100%; background-color: #eee; border-radius: 4px; height: 8px; overflow: hidden; margin: 4px 0 10px 0; }
+        .tt-progress-fill { height: 100%; transition: width 0.3s; }
+        .tt-task-row { display: flex; justify-content: space-between; font-size: 0.85em; margin-bottom: 2px; align-items: flex-end; }
+      </style>
+    `;
+
+    document.getElementById("modal-body").innerHTML = `
+      ${styleBlock}
+      <div id="modal-statistics-container" style="max-height: 60vh; overflow-y: auto; display: grid; grid-template-columns: repeat(${STATS_PER_ROW}, 1fr); gap: 5px; padding: 5px;">
+        ${
+          scaleStats.map((stat, index)=>{
+            let totals = stat.tasks.reduce((acc, task) => {
+              acc.elapsed += Math.min(Number(task.elapsed) || 0, Number(task.goal) || 0);
+              acc.goal += Number(task.goal) || 0;
+              return acc;
+            }, { elapsed: 0, goal: 0 });
+            
+            let percentage = totals.goal > 0 ? (totals.elapsed / totals.goal) * 100 : 100;
+            let clampedPercentage = Math.min(100, Math.max(0, percentage));
+            let hue = (clampedPercentage / 100) * 120;
+
+            return `
+              <div 
+              class="heatmap-square time-scale" 
+              data-index="${index}"
+              style="margin: 0; border-radius: 6px; background-color: hsl(${hue}, 100%, 45%); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15); aspect-ratio: 1;">
+              </div>
+            `
+          }).join("")
+        }
+        ${
+          Array.from({ length: emptySlotsCount }).map(() => `
+            <div style="margin: 0; border-radius: 6px; background-color: #f0f0f0; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.05); aspect-ratio: 1;"></div>
+          `).join("")
+        }
+      </div>
+    `; 
+
+    let tooltip = document.getElementById("global-heatmap-tooltip");
+    if (!tooltip) {
+      tooltip = document.createElement("div");
+      tooltip.id = "global-heatmap-tooltip";
+      document.body.appendChild(tooltip);
+    }
+    
+    const squares = document.querySelectorAll(".heatmap-square");
+    
+    squares.forEach(square => {
+      square.addEventListener("mouseenter", (e) => {
+        const index = e.target.getAttribute("data-index");
+        const stat = scaleStats[index];
+        
+        let totals = stat.tasks.reduce((acc, task) => {
+          acc.elapsed += Math.min(Number(task.elapsed) || 0, Number(task.goal) || 0);
+          acc.goal += Number(task.goal) || 0; return acc;
+        }, { elapsed: 0, goal: 0 });
+        
+        let percentage = totals.goal > 0 ? (totals.elapsed / totals.goal) * 100 : 100;
+        let hue = (Math.min(100, Math.max(0, percentage)) / 100) * 120;
+        
+        const startStr = new Date(stat.start).toLocaleDateString('en-GB');
+        const endStr = new Date(new Date(stat.start).getTime() + (stat.duration-1) * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB');
+        const dateRange = stat.duration === 1 ? startStr : `${startStr} - ${endStr}`;
+
+        const tasksHtml = stat.tasks.map(task => {
+          const taskGoal = Number(task.goal) || 0;
+          if (taskGoal <= 0) return "";
+          const taskElapsed = Number(task.elapsed) || 0;
+          const taskProgress = (taskElapsed / taskGoal) * 100;
+          const taskHue = (Math.min(100, taskProgress) / 100) * 120;
+          
+          return `
+            <div class="tt-task-row">
+              <span style="font-weight: 500; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 140px;">${task.name}</span>
+              <span style="color: #666;">
+                ${formatDuration(taskElapsed * 1000)} / ${formatDuration(taskGoal * 1000)} 
+                <strong style="color:#333; margin-left: 5px;">${taskProgress.toFixed(1)}%</strong>
+              </span>
+            </div>
+            <div class="tt-progress-bar">
+              <div class="tt-progress-fill" style="width: ${Math.min(100, taskProgress)}%; background-color: hsl(${taskHue}, 100%, 45%);"></div>
+            </div>
+          `;
+        }).join("");
+
+        tooltip.innerHTML = `
+          <div style="font-weight: bold; font-size: 1.1em; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 6px;">
+            ${stat.name} <span style="color: #666; font-size: 0.85em; font-weight: normal; float: right; margin-top: 2px;">${dateRange}</span>
+          </div>
+          <div class="tt-task-row" style="font-weight: bold; margin-top: 10px;">
+            <span>Total Completion</span>
+            <span>${formatDuration(totals.elapsed * 1000)} / ${formatDuration(totals.goal * 1000)} <span style="margin-left: 5px;">${percentage.toFixed(1)}%</span></span>
+          </div>
+          <div class="tt-progress-bar" style="margin-bottom: 15px; height: 10px;">
+            <div class="tt-progress-fill" style="width: ${Math.min(100, percentage)}%; background-color: hsl(${hue}, 100%, 45%);"></div>
+          </div>
+          <div style="color: #999; margin-bottom: 6px; font-size: 0.75em; text-transform: uppercase; letter-spacing: 0.5px;">Task Breakdown</div>
+          ${tasksHtml}
+        `;
+        
+        tooltip.style.opacity = "1";
+      });
+
+      square.addEventListener("mousemove", (e) => {
+        const tooltipWidth = tooltip.offsetWidth || 310; 
+        const tooltipHeight = tooltip.offsetHeight || 150;
+
+        let x = e.clientX - (tooltipWidth / 2);
+        let y = e.clientY - tooltipHeight - 15;
+        
+        if (x < 10) x = 10;
+        if (x + tooltipWidth > window.innerWidth - 10) x = window.innerWidth - tooltipWidth - 10;
+        
+        if (y < 10) {
+           y = e.clientY + 20; 
+        }
+
+        tooltip.style.left = x + "px";
+        tooltip.style.top = y + "px";
+      });
+
+      square.addEventListener("mouseleave", () => {
+        tooltip.style.opacity = "0";
+      });
+    });
+  }
+
+  
+  document.getElementById("modal-cancel").style.display = "none";
+  document.getElementById("btn-submit").innerText = "Close";
+  document.getElementById("btn-submit").onclick = function() { 
+    const tooltip = document.getElementById("global-heatmap-tooltip");
+    if (tooltip) tooltip.remove();
+    closeModal("modal"); 
+  };
+  
+  openModal("modal");
+}
+
 function openHelp(){
   document.getElementById("modal-title").innerText = "How to use the tracker";
   document.getElementById("modal-body").innerHTML = `
@@ -1497,3 +1689,4 @@ window.editTimeScale = editTimeScale;
 window.deleteTimeScale = deleteTimeScale;
 window.openFullStatisticsModal = openFullStatisticsModal;
 window.openModal = openModal;
+window.openTimeScaleStatistics = openTimeScaleStatistics;
