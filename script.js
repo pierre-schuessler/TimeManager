@@ -1431,7 +1431,10 @@ function RenderStatistics(container = document.getElementById("root-statistics")
 }
 
 function openTimeScaleStatistics(scaleId) {
-  const scaleStats = Object.values(state.statistics).filter(stat => stat.scaleId === scaleId);
+  const scaleStats = Object.values(state.statistics)
+    .filter(stat => stat.scaleId === scaleId)
+    .sort((a, b) => new Date(a.start) - new Date(b.start));
+  
   /*
   const scaleStats = Array.from({ length: 365 }, (_, i) => { 
     const wave = Math.sin(i / 2.5) * 0.4 + 0.5; 
@@ -1450,9 +1453,8 @@ function openTimeScaleStatistics(scaleId) {
         { name: "Emails & Admin", elapsed: Math.round(1800 * Math.random()), goal: 1800 }
       ] 
     };
-  });
+  }).sort((a, b) => new Date(a.start) - new Date(b.start));
   */
-  
   
   if (scaleStats.length === 0) {
     document.getElementById("modal-title").innerText = "Statistics";
