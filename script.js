@@ -1600,6 +1600,5 @@ window.toggleSubtask = toggleSubtask;
 window.addTimeScale = addTimeScale;
 window.editTimeScale = editTimeScale;
 window.deleteTimeScale = deleteTimeScale;
-window.openFullStatisticsModal = openFullStatisticsModal;
 window.openModal = openModal;
 window.openTimeScaleStatistics = openTimeScaleStatistics;
