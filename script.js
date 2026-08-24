@@ -706,7 +706,7 @@ async function editTask(id) {
     </div>
     
     <div class="form-group" style="margin: var(--spacing-lg) 0;">
-      <label><input type="checkbox" id="modal-isHabit" ${task.isHabit ? 'checked' : ''} onchange="document.getElementById('habit-view').style.display = this.checked ? 'block' : 'none'; document.getElementById('standard-view').style.display = this.checked ? 'none' : 'block';"> Track by sessions/habits</label>
+      <label><input type="checkbox" id="modal-isHabit" ${task.isHabit ? 'checked' : ''} onchange="document.getElementById('habit-view').style.display = this.checked ? 'block' : 'none'; document.getElementById('standard-view').style.display = this.checked ? 'none' : 'block';"> Track by sessions</label>
     </div>
 
     <div id="habit-view" style="display: ${task.isHabit ? 'block' : 'none'};">
