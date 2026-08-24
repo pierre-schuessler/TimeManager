@@ -349,12 +349,12 @@ h3 {
 }
 
 .btn-primary {
-    background-color: blue;
+    background-color: hsl(217, 91%, 50%);
     color: white;
 }
 
 .btn-primary:hover {
-    background-color: var(--primary);
+    background-color: blue;
     text-decoration: none;
 }
 

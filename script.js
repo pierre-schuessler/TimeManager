@@ -138,9 +138,13 @@ async function migrateToFirebase() {
     let loadedTasks = localTasks ? JSON.parse(localTasks) : {};
     
     Object.values(loadedTasks).forEach(task => {
+      if (task.isHabit === undefined) task.isHabit = false;
+      if (task.sessionDuration === undefined) task.sessionDuration = 1800;
       if (!task.times) task.times = {};
       Object.keys(loadedScales).forEach(scaleId => {
-        if (!task.times[scaleId]) task.times[scaleId] = { elapsed: 0, goal: 3600 };
+        if (!task.times[scaleId]) task.times[scaleId] = { elapsed: 0, goal: 3600, sessions: 0, targetSessions: 1 };
+        if (task.times[scaleId].sessions === undefined) task.times[scaleId].sessions = 0;
+        if (task.times[scaleId].targetSessions === undefined) task.times[scaleId].targetSessions = 1;
       });
       if (!task.subtasks) task.subtasks = {};
     });
@@ -191,20 +195,19 @@ function setupFirebaseListener() {
       let needsTasksRender = true;
       let needsAgendaRender = true;
       
-      
       const incomingTimeScales = fbData.timeScales || {};
       let needsTimeScalesRender = JSON.stringify(state.timeScales) !== JSON.stringify(incomingTimeScales);
       state.timeScales = incomingTimeScales;
 
-      
-
-      
-      
       let incomingTasks = fbData.tasks || {};
       Object.values(incomingTasks).forEach(task => {
+        if (task.isHabit === undefined) task.isHabit = false;
+        if (task.sessionDuration === undefined) task.sessionDuration = 1800;
         if (!task.times) task.times = {};
         Object.keys(state.timeScales).forEach(scaleId => {
-          if (!task.times[scaleId]) task.times[scaleId] = { elapsed: 0, goal: 3600 };
+          if (!task.times[scaleId]) task.times[scaleId] = { elapsed: 0, goal: 3600, sessions: 0, targetSessions: 1 };
+          if (task.times[scaleId].sessions === undefined) task.times[scaleId].sessions = 0;
+          if (task.times[scaleId].targetSessions === undefined) task.times[scaleId].targetSessions = 1;
         });
         if (!task.subtasks) task.subtasks = {};
       });
@@ -273,9 +276,13 @@ async function Load() {
 
   state.tasks = rawData.tasks ? JSON.parse(rawData.tasks) : {};
   Object.values(state.tasks).forEach(task => {
+    if (task.isHabit === undefined) task.isHabit = false;
+    if (task.sessionDuration === undefined) task.sessionDuration = 1800;
     if (!task.times) task.times = {};
     Object.keys(state.timeScales).forEach(scaleId => {
-      if (!task.times[scaleId]) task.times[scaleId] = { elapsed: 0, goal: 3600 };
+      if (!task.times[scaleId]) task.times[scaleId] = { elapsed: 0, goal: 3600, sessions: 0, targetSessions: 1 };
+      if (task.times[scaleId].sessions === undefined) task.times[scaleId].sessions = 0;
+      if (task.times[scaleId].targetSessions === undefined) task.times[scaleId].targetSessions = 1;
     });
     if (!task.subtasks) task.subtasks = {};
   });
@@ -368,13 +375,15 @@ function ring(){ new Audio('ring.mp3').play(); }
 function createNewTask(){
   let times = {}
   Object.keys(state.timeScales).forEach((scaleId)=>{
-    times[scaleId] = { elapsed: 0, goal: 3600 }
+    times[scaleId] = { elapsed: 0, goal: 3600, sessions: 0, targetSessions: 1 }
   });
 
   const newId = crypto.randomUUID();
   state.tasks[newId] = {
     id: newId,
     name: "New Task",
+    isHabit: false,
+    sessionDuration: 1800,
     times: times,
     running: false,
     subtasks: {},
@@ -481,7 +490,7 @@ timerWorker.onmessage = function(e) {
     let anyCrossed = false;
     Object.values(state.timeScales).forEach(scale => {
       if(!startCounters) startCounters = JSON.parse(JSON.stringify(task.times));
-      if(!startCounters[scale.id]) startCounters[scale.id] = {elapsed: 0, goal: 3600};
+      if(!startCounters[scale.id]) startCounters[scale.id] = {elapsed: 0, goal: 3600, sessions: 0, targetSessions: 1};
 
       const newElapsed = Math.round(startCounters[scale.id].elapsed + elapsedTime);
       if (task.times[scale.id].elapsed < task.times[scale.id].goal && newElapsed >= task.times[scale.id].goal) {
@@ -533,7 +542,7 @@ async function toggleTask(id, UITarget) {
       };
       Object.keys(state.timeScales).forEach(scaleId => {
         if (!task.times) task.times = {};
-        if (!task.times[scaleId]) task.times[scaleId] = { elapsed: 0, goal: 3600 };
+        if (!task.times[scaleId]) task.times[scaleId] = { elapsed: 0, goal: 3600, sessions: 0, targetSessions: 1 };
         updates[`tasks/${task.id}/times/${scaleId}/elapsed`] = task.times[scaleId].elapsed;
       });
       update(ref(db, `users/${user.uid}`), updates);
@@ -556,7 +565,7 @@ async function toggleTask(id, UITarget) {
           };
           Object.keys(state.timeScales).forEach(scaleId => {
             if (!t.times) t.times = {};
-            if (!t.times[scaleId]) t.times[scaleId] = { elapsed: 0, goal: 3600 };
+            if (!t.times[scaleId]) t.times[scaleId] = { elapsed: 0, goal: 3600, sessions: 0, targetSessions: 1 };
             updates[`tasks/${t.id}/times/${scaleId}/elapsed`] = t.times[scaleId].elapsed;
           });
           update(ref(db, `users/${user.uid}`), updates);
@@ -583,6 +592,86 @@ async function toggleTask(id, UITarget) {
     timerWorker.postMessage('start');
   }
 }
+
+function syncAgendaGap(taskId, gap) {
+  if (gap === 0) return;
+  let now = new Date().getTime();
+  
+  if (gap > 0) {
+    let timeRemaining = gap * 1000;
+    let timeMarker = now;
+    while (timeRemaining > 0) {
+      let markerDate = new Date(timeMarker);
+      let minutes = Math.floor(markerDate.getMinutes() / 15) * 15;
+      let slotStart = new Date(markerDate.getFullYear(), markerDate.getMonth(), markerDate.getDate(), markerDate.getHours(), minutes, 0, 0);
+      let slotStartTime = slotStart.getTime();
+      
+      let timeInThisSlot;
+      if (timeMarker === slotStartTime) { timeMarker -= 1; continue; }
+      else { timeInThisSlot = Math.min(timeRemaining, timeMarker - slotStartTime); }
+      
+      let currentSlotIso = getSafeIsoString(slotStart);
+      
+      if (!state.agenda[currentSlotIso]) state.agenda[currentSlotIso] = { iso: currentSlotIso, busy: false, tasksWorked: {} };
+      if (!state.agenda[currentSlotIso].tasksWorked) state.agenda[currentSlotIso].tasksWorked = {};
+      
+      state.agenda[currentSlotIso].tasksWorked[taskId] = (state.agenda[currentSlotIso].tasksWorked[taskId] || 0) + (timeInThisSlot / 1000);
+      timeMarker -= timeInThisSlot;
+      timeRemaining -= timeInThisSlot;
+    }
+  } else {
+    let timeToRemove = Math.abs(gap);
+    let sortedIsos = Object.keys(state.agenda).sort((a,b) => new Date(b).getTime() - new Date(a).getTime());
+    
+    for (let iso of sortedIsos) {
+      if (timeToRemove <= 0) break;
+      let block = state.agenda[iso];
+      if (block.tasksWorked && block.tasksWorked[taskId] > 0) {
+        let availableToRemove = block.tasksWorked[taskId];
+        if (availableToRemove >= timeToRemove) {
+          block.tasksWorked[taskId] -= timeToRemove;
+          timeToRemove = 0;
+        } else {
+          timeToRemove -= availableToRemove;
+          block.tasksWorked[taskId] = 0;
+        }
+      }
+    }
+  }
+}
+
+function snapSession(taskId) {
+  let task = state.tasks[taskId];
+  if (!task || !task.isHabit) return;
+
+  if (task.running) {
+    toggleTask(taskId, null);
+  }
+
+  let firstScaleId = Object.keys(state.timeScales)[0];
+  let currentElapsed = task.times[firstScaleId].elapsed;
+
+  Object.keys(state.timeScales).forEach(scaleId => {
+    if(task.times[scaleId]) {
+      let currentSessions = task.times[scaleId].sessions || 0;
+      let newSessions = currentSessions + 1;
+      task.times[scaleId].sessions = newSessions;
+      task.times[scaleId].elapsed = newSessions * task.sessionDuration;
+    }
+  });
+
+  let targetElapsed = task.times[firstScaleId].elapsed;
+  let gap = targetElapsed - currentElapsed;
+
+  syncAgendaGap(taskId, gap);
+  
+  Save(true);
+  RenderTasks();
+  RenderAgenda();
+  UpdateTimeScalesRender();
+}
+
+window.snapSession = snapSession;
 
 function moveTaskUp(id) {
   let tasksArray = Object.values(state.tasks).sort((a, b) => a.order - b.order);
@@ -615,34 +704,70 @@ async function editTask(id) {
       <label>Name <span style="color:red">*</span></label>
       <input type="text" id="modal-taskName" value="${task.name}">
     </div>
-    ${
-      Object.values(state.timeScales).map((scale) => {
-        const elapsedSecs = task.times[scale.id]?.elapsed || 0;
-        const eh = Math.floor(elapsedSecs / 3600);
-        const em = Math.floor((elapsedSecs % 3600) / 60);
-        const es = elapsedSecs % 60;
+    
+    <div class="form-group" style="margin: var(--spacing-lg) 0;">
+      <label><input type="checkbox" id="modal-isHabit" ${task.isHabit ? 'checked' : ''} onchange="document.getElementById('habit-view').style.display = this.checked ? 'block' : 'none'; document.getElementById('standard-view').style.display = this.checked ? 'none' : 'block';"> Track by sessions/habits</label>
+    </div>
 
-        const goalSecs = task.times[scale.id]?.goal || 0;
-        const gh = Math.floor(goalSecs / 3600);
-        const gm = Math.floor((goalSecs % 3600) / 60);
-        const gs = goalSecs % 60;
-
-        return `
-          <div class="form-group">
-            <label>${scale.name} (Elapsed / Goal) <span style="color:red">*</span></label>
-            <div style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap;">
-              <input type="number" id="modal-task-${scale.id}-elapsed-h" value="${eh}" min="0" placeholder="HH" style="width: 55px;"> h
-              <input type="number" id="modal-task-${scale.id}-elapsed-m" value="${em}" min="0" max="59" placeholder="MM" style="width: 55px;"> m
-              <input type="number" id="modal-task-${scale.id}-elapsed-s" value="${es}" min="0" max="59" placeholder="SS" style="width: 55px;"> s
-              <span style="font-size: 24px; font-weight: bold; margin: 0 8px; color: #555;">/</span>
-              <input type="number" id="modal-task-${scale.id}-goal-h" value="${gh}" min="0" placeholder="HH" style="width: 55px;"> h
-              <input type="number" id="modal-task-${scale.id}-goal-m" value="${gm}" min="0" max="59" placeholder="MM" style="width: 55px;"> m
-              <input type="number" id="modal-task-${scale.id}-goal-s" value="${gs}" min="0" max="59" placeholder="SS" style="width: 55px;"> s
+    <div id="habit-view" style="display: ${task.isHabit ? 'block' : 'none'};">
+      <div class="form-group">
+        <label>Time per session <span style="color:red">*</span></label>
+        <div style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap;">
+          <input type="number" id="modal-session-h" value="${Math.floor((task.sessionDuration||1800)/3600)}" min="0" placeholder="HH" style="width: 55px;"> h
+          <input type="number" id="modal-session-m" value="${Math.floor(((task.sessionDuration||1800)%3600)/60)}" min="0" max="59" placeholder="MM" style="width: 55px;"> m
+          <input type="number" id="modal-session-s" value="${(task.sessionDuration||1800)%60}" min="0" max="59" placeholder="SS" style="width: 55px;"> s
+        </div>
+      </div>
+      ${
+        Object.values(state.timeScales).map(scale => {
+          const ts = task.times[scale.id]?.targetSessions || 1;
+          const currentSessions = task.times[scale.id]?.sessions || 0;
+          return `
+            <div style="display: flex; gap: 15px; margin-bottom: 10px;">
+              <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                <label>${scale.name} Completed Sessions</label>
+                <input type="number" id="modal-completed-${scale.id}" value="${currentSessions}" min="0" style="width: 100%;">
+              </div>
+              <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                <label>${scale.name} Target Sessions <span style="color:red">*</span></label>
+                <input type="number" id="modal-target-${scale.id}" value="${ts}" min="0" style="width: 100%;">
+              </div>
             </div>
-          </div>
-        `;
-      }).join("")
-    }
+          `;
+        }).join("")
+      }
+    </div>
+
+    <div id="standard-view" style="display: ${task.isHabit ? 'none' : 'block'};">
+      ${
+        Object.values(state.timeScales).map((scale) => {
+          const elapsedSecs = task.times[scale.id]?.elapsed || 0;
+          const eh = Math.floor(elapsedSecs / 3600);
+          const em = Math.floor((elapsedSecs % 3600) / 60);
+          const es = elapsedSecs % 60;
+
+          const goalSecs = task.times[scale.id]?.goal || 0;
+          const gh = Math.floor(goalSecs / 3600);
+          const gm = Math.floor((goalSecs % 3600) / 60);
+          const gs = goalSecs % 60;
+
+          return `
+            <div class="form-group">
+              <label>${scale.name} (Elapsed / Goal) <span style="color:red">*</span></label>
+              <div style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap;">
+                <input type="number" id="modal-task-${scale.id}-elapsed-h" value="${eh}" min="0" placeholder="HH" style="width: 55px;"> h
+                <input type="number" id="modal-task-${scale.id}-elapsed-m" value="${em}" min="0" max="59" placeholder="MM" style="width: 55px;"> m
+                <input type="number" id="modal-task-${scale.id}-elapsed-s" value="${es}" min="0" max="59" placeholder="SS" style="width: 55px;"> s
+                <span style="font-size: 24px; font-weight: bold; margin: 0 8px; color: #555;">/</span>
+                <input type="number" id="modal-task-${scale.id}-goal-h" value="${gh}" min="0" placeholder="HH" style="width: 55px;"> h
+                <input type="number" id="modal-task-${scale.id}-goal-m" value="${gm}" min="0" max="59" placeholder="MM" style="width: 55px;"> m
+                <input type="number" id="modal-task-${scale.id}-goal-s" value="${gs}" min="0" max="59" placeholder="SS" style="width: 55px;"> s
+              </div>
+            </div>
+          `;
+        }).join("")
+      }
+    </div>
   `;
 
   const moveUpButtonHTML = taskIndex > 0 
@@ -659,31 +784,61 @@ async function editTask(id) {
     const newName = document.getElementById("modal-taskName").value;
     if (!newName) { alert("Invalid input. Please try again."); return; }
     
+    const newIsHabit = document.getElementById("modal-isHabit").checked;
+
+    if (task.isHabit !== newIsHabit) {
+      if (!window.confirm("Changing the task type will reset your current progress for this task. Are you sure you want to continue?")) {
+        return;
+      }
+    }
+
     task.name = newName;
-    try {
-      task.times = Object.values(state.timeScales).reduce((acc, scale) => {
-        const eh = parseInt(document.getElementById(`modal-task-${scale.id}-elapsed-h`).value) || 0;
-        const em = parseInt(document.getElementById(`modal-task-${scale.id}-elapsed-m`).value) || 0;
-        const es = parseInt(document.getElementById(`modal-task-${scale.id}-elapsed-s`).value) || 0;
-        const gh = parseInt(document.getElementById(`modal-task-${scale.id}-goal-h`).value) || 0;
-        const gm = parseInt(document.getElementById(`modal-task-${scale.id}-goal-m`).value) || 0;
-        const gs = parseInt(document.getElementById(`modal-task-${scale.id}-goal-s`).value) || 0;
+    task.isHabit = newIsHabit;
 
-        if (eh < 0 || em < 0 || es < 0 || gh < 0 || gm < 0 || gs < 0) throw new Error("Negative values");
+    if (task.isHabit) {
+      const sh = parseInt(document.getElementById("modal-session-h").value) || 0;
+      const sm = parseInt(document.getElementById("modal-session-m").value) || 0;
+      const ss = parseInt(document.getElementById("modal-session-s").value) || 0;
+      task.sessionDuration = (sh * 3600) + (sm * 60) + ss;
 
-        acc[scale.id] = {
-          ...task.times[scale.id],
-          elapsed: (eh * 3600) + (em * 60) + es,
-          goal: (gh * 3600) + (gm * 60) + gs
-        };
-        return acc;
-      }, {});
-    } catch (error) { alert("Invalid time input."); return; }
+      Object.values(state.timeScales).forEach(scale => {
+        const targetSessions = parseInt(document.getElementById(`modal-target-${scale.id}`).value) || 0;
+        const completedSessions = parseInt(document.getElementById(`modal-completed-${scale.id}`).value) || 0;
+
+        task.times[scale.id].targetSessions = targetSessions;
+        task.times[scale.id].sessions = completedSessions;
+        task.times[scale.id].goal = targetSessions * task.sessionDuration;
+        
+        let targetElapsed = completedSessions * task.sessionDuration;
+        if (!task.running) task.times[scale.id].elapsed = targetElapsed;
+      });
+
+    } else {
+      try {
+        task.times = Object.values(state.timeScales).reduce((acc, scale) => {
+          const eh = parseInt(document.getElementById(`modal-task-${scale.id}-elapsed-h`).value) || 0;
+          const em = parseInt(document.getElementById(`modal-task-${scale.id}-elapsed-m`).value) || 0;
+          const es = parseInt(document.getElementById(`modal-task-${scale.id}-elapsed-s`).value) || 0;
+          const gh = parseInt(document.getElementById(`modal-task-${scale.id}-goal-h`).value) || 0;
+          const gm = parseInt(document.getElementById(`modal-task-${scale.id}-goal-m`).value) || 0;
+          const gs = parseInt(document.getElementById(`modal-task-${scale.id}-goal-s`).value) || 0;
+
+          if (eh < 0 || em < 0 || es < 0 || gh < 0 || gm < 0 || gs < 0) throw new Error("Negative values");
+
+          acc[scale.id] = {
+            ...task.times[scale.id],
+            elapsed: (eh * 3600) + (em * 60) + es,
+            goal: (gh * 3600) + (gm * 60) + gs
+          };
+          return acc;
+        }, {});
+      } catch (error) { alert("Invalid time input."); return; }
+    }
 
     const user = auth.currentUser;
     if (user) {
       isSavingLocally = true;
-      update(ref(db, `users/${user.uid}/tasks/${task.id}`), { name: task.name, times: task.times });
+      update(ref(db, `users/${user.uid}/tasks/${task.id}`), { name: task.name, times: task.times, isHabit: task.isHabit, sessionDuration: task.sessionDuration });
       Save(false);
     } else { Save(true); }
     RenderTasks(); RenderTimeScales(); closeModal("modal");
@@ -755,11 +910,14 @@ function RenderTasks() {
       <div class="task" style="text-align: center; cursor: pointer;" onclick="createNewTask()">+ New Task</div>
       ${sortedTasks.map((task)=>{
         return `
-          <div class="task ${task.running ? "active" : ""}" style="cursor: pointer;" onclick="if (event.target.classList.contains('edit-icon') || event.target.closest('.subtask-area')) { return; } toggleTask('${task.id}', this)">
+          <div class="task ${task.running ? "active" : ""}" style="cursor: pointer;" onclick="if (event.target.classList.contains('edit-icon') || event.target.closest('.subtask-area') || event.target.classList.contains('btn-snap')) { return; } toggleTask('${task.id}', this)">
             <div class="task-main-content">
               <div class="task-title-row">
                 <h3 class="task-title">${task.name}</h3>
-                <div class="task-actions edit-icon" onclick="editTask('${task.id}')">⚙</div>
+                <div style="display: flex; gap: 10px;">
+                  ${task.isHabit ? `<button class="btn btn-primary btn-sm btn-snap" onclick="snapSession('${task.id}'); event.stopPropagation();">+1</button>` : ''}
+                  <div class="task-actions edit-icon" onclick="editTask('${task.id}')">⚙</div>
+                </div>
               </div>
               <div class="subtask-area" style="margin: 15px 0;">
                 <div class="task" style="text-align: center; cursor: pointer; padding: 5px; font-size: 0.9em; margin-bottom: 10px;" onclick="createNewSubtask('${task.id}')">+ New subtask</div>
@@ -768,8 +926,8 @@ function RenderTasks() {
                   let textStyle = subtask.done ? 'text-decoration: line-through; opacity: 0.6;' : '';
                   let classname = subtask.done ? "task subtask-done" : "task";
                   return `<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;" class="${classname}">
-                     <input type="checkbox" ${isChecked} onclick="toggleSubtask('${task.id}', '${subtask.id}')"> 
-                     <span style="font-weight: 500; ${textStyle}">${subtask.name}</span>
+                      <input type="checkbox" ${isChecked} onclick="toggleSubtask('${task.id}', '${subtask.id}')"> 
+                      <span style="font-weight: 500; ${textStyle}">${subtask.name}</span>
                   </div>`
                 }).join("")}
               </div>
@@ -777,12 +935,22 @@ function RenderTasks() {
                 ${Object.values(state.timeScales).map((scale)=>{
                   if (!task.times[scale.id] || task.times[scale.id].goal <= 0) return "";
                   const progress = !firstRender ? (task.times[scale.id].elapsed / task.times[scale.id].goal) * 100 : 0;
+                  
+                  let labelMiddle = `${progress.toFixed(1)}%`;
+                  let labelRight = `${new Date(task.times[scale.id].elapsed * 1000).toISOString().substring(11, 19)} / ${new Date(task.times[scale.id].goal * 1000).toISOString().substring(11, 19)}`;
+                  if (task.isHabit) {
+                    labelMiddle = `Sessions: ${task.times[scale.id].sessions} / ${task.times[scale.id].targetSessions}`;
+                    labelRight = `${new Date(task.times[scale.id].elapsed * 1000).toISOString().substring(11, 19)}`;
+                  } else {
+                    labelRight += ` (${new Date(Math.max(0, task.times[scale.id].goal - task.times[scale.id].elapsed) * 1000).toISOString().substring(11, 19)} left)`;
+                  }
+
                   return `
-                    <div class="task-progress-row" data-scale-id="${scale.id}">
+                    <div class="task-progress-row" data-scale-id="${scale.id}" data-task-id="${task.id}">
                       <div class="task-progress-meta">
                         <span>${scale.name}</span>
-                        <span>${progress.toFixed(1)}%</span>
-                        <span>${new Date(task.times[scale.id].elapsed * 1000).toISOString().substring(11, 19)} / ${new Date(task.times[scale.id].goal * 1000).toISOString().substring(11, 19)} (${new Date(Math.max(0, task.times[scale.id].goal - task.times[scale.id].elapsed) * 1000).toISOString().substring(11, 19)} left)</span>
+                        <span>${labelMiddle}</span>
+                        <span>${labelRight}</span>
                       </div>
                       <div class="progress-bar task-progress-bar">
                         <div class="progress-bar-fill" style="width: ${Math.min(progress, 100)}%;"></div>
@@ -820,8 +988,13 @@ function UpdateTasksRender() {
       const progress = task.times[scale.id].goal > 0 ? (task.times[scale.id].elapsed / task.times[scale.id].goal) * 100 : 0;
       let metaSpans = row.querySelectorAll(".task-progress-meta span");
       if (metaSpans.length >= 3) {
-        metaSpans[1].textContent = `${progress.toFixed(1)}%`;
-        metaSpans[2].textContent = `${new Date(task.times[scale.id].elapsed * 1000).toISOString().substring(11, 19)} / ${new Date(task.times[scale.id].goal * 1000).toISOString().substring(11, 19)} (${new Date(Math.max(0, task.times[scale.id].goal - task.times[scale.id].elapsed) * 1000).toISOString().substring(11, 19)} left)`;
+        if (task.isHabit) {
+          metaSpans[1].textContent = `Sessions: ${task.times[scale.id].sessions} / ${task.times[scale.id].targetSessions}`;
+          metaSpans[2].textContent = `${new Date(task.times[scale.id].elapsed * 1000).toISOString().substring(11, 19)}`;
+        } else {
+          metaSpans[1].textContent = `${progress.toFixed(1)}%`;
+          metaSpans[2].textContent = `${new Date(task.times[scale.id].elapsed * 1000).toISOString().substring(11, 19)} / ${new Date(task.times[scale.id].goal * 1000).toISOString().substring(11, 19)} (${new Date(Math.max(0, task.times[scale.id].goal - task.times[scale.id].elapsed) * 1000).toISOString().substring(11, 19)} left)`;
+        }
       }
       let progressBarFill = row.querySelector(".progress-bar-fill");
       if (progressBarFill) progressBarFill.style.width = `${Math.min(100, progress)}%`;
@@ -837,7 +1010,10 @@ function addTimeScale() {
   let runningTask = null;
   Object.values(state.tasks).forEach((task) => {
     if (!task.times) task.times = {};
-    task.times[newScaleId] = { elapsed: 0, goal: 3600 };
+    task.times[newScaleId] = { elapsed: 0, goal: 3600, sessions: 0, targetSessions: 1 };
+    if (task.isHabit) {
+        task.times[newScaleId].goal = task.times[newScaleId].targetSessions * task.sessionDuration;
+    }
     if (task.running) runningTask = task;
   });
 
@@ -1119,7 +1295,10 @@ function resetTimes(){
 
   let runningTask = null;
   Object.values(state.tasks).forEach((task)=>{
-    Object.keys(task.times).forEach((scaleId)=>{ task.times[scaleId].elapsed = 0 })
+    Object.keys(task.times).forEach((scaleId)=>{ 
+        task.times[scaleId].elapsed = 0;
+        task.times[scaleId].sessions = 0;
+    })
     if (task.running) runningTask = task;
   })
 
@@ -1340,7 +1519,10 @@ function checkTimeScaleDone() {
       
       let runningTask = null;
       Object.values(state.tasks).forEach((task) => {
-        if (task.times && task.times[scale.id]) task.times[scale.id].elapsed = 0;
+        if (task.times && task.times[scale.id]) {
+            task.times[scale.id].elapsed = 0;
+            task.times[scale.id].sessions = 0;
+        }
         if (task.running) runningTask = task;
       });
 
@@ -1628,4 +1810,4 @@ window.addTimeScale = addTimeScale;
 window.editTimeScale = editTimeScale;
 window.deleteTimeScale = deleteTimeScale;
 window.openModal = openModal;
-window.openTimeScaleStatistics = openTimeScaleStatistics;
+window.openTimeScaleStatistics = openTimeScaleStatistics; 
