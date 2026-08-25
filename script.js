@@ -1085,7 +1085,7 @@ function getTimeScaleStreak(scaleId) {
 
   let streakInScales = 0;
   for (const stat of scaleStats) {
-    const cappedTotalWorked = stat.tasks.reduce((sum, task) => {
+    const cappedTotalWorked = (stat.tasks || []).reduce((sum, task) => {
       return sum + Math.min(Number(task.elapsed) || 0, Number(task.goal) || 0);
     }, 0);
     if (stat.goal === 0 || cappedTotalWorked >= stat.goal) { streakInScales++; } 
@@ -1246,7 +1246,11 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
     const workableRemainingMs = getWorkableTimeBetween(currentTime, scaleEndMs);
     const totalTaskRequiredForDeadlineMs = getRequiredWorkByDeadlineMs(scaleEndMs);
     const currentFreeTimeMs = workableRemainingMs - totalTaskRequiredForDeadlineMs;
-    const rawElapsedMs = Object.values(state.tasks).reduce((sum, task) => sum + (Number(task.times[scale.id]?.elapsed) || 0) * 1000, 0);
+    const rawElapsedMs = Object.values(state.tasks).reduce((sum, task) => {
+      const elapsed = Number(task.times[scale.id]?.elapsed) || 0;
+      const goal = Number(task.times[scale.id]?.goal) || 0;
+      return sum + (Math.min(elapsed, goal) * 1000);
+    }, 0);
     const freeTimeUsedMs = Math.max(0, timeUsed - rawElapsedMs);
     const initialFreeTimeMs = currentFreeTimeMs + freeTimeUsedMs;
     const freeTimeUsedPercentage = initialFreeTimeMs > 0 ? Math.min(100, Math.max(0, (freeTimeUsedMs / initialFreeTimeMs) * 100)) : (freeTimeUsedMs > 0 ? 100 : 0);
@@ -1610,7 +1614,7 @@ function openTimeScaleStatistics(scaleId) {
       <div id="modal-statistics-container" style="max-height: 60vh; overflow-y: auto; display: grid; grid-template-columns: repeat(${STATS_PER_ROW}, 1fr); gap: 5px; padding: 5px;">
         ${
           scaleStats.map((stat, index)=>{
-            let totals = stat.tasks.reduce((acc, task) => {
+            let totals = (stat.tasks || []).reduce((acc, task) => {
               acc.elapsed += Math.min(Number(task.elapsed) || 0, Number(task.goal) || 0);
               acc.goal += Number(task.goal) || 0;
               return acc;
@@ -1656,7 +1660,7 @@ function openTimeScaleStatistics(scaleId) {
         const index = e.target.getAttribute("data-index");
         const stat = scaleStats[index];
         
-        let totals = stat.tasks.reduce((acc, task) => {
+        let totals = (stat.tasks || []).reduce((acc, task) => {
           acc.elapsed += Math.min(Number(task.elapsed) || 0, Number(task.goal) || 0);
           acc.goal += Number(task.goal) || 0; return acc;
         }, { elapsed: 0, goal: 0 });
@@ -1668,7 +1672,7 @@ function openTimeScaleStatistics(scaleId) {
         const endStr = new Date(new Date(stat.start).getTime() + (stat.duration-1) * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB');
         const dateRange = stat.duration === 1 ? startStr : `${startStr} - ${endStr}`;
 
-        const tasksHtml = stat.tasks.sort((a, b) => b.elapsed - a.elapsed).map(task => {
+        const tasksHtml = (stat.tasks || []).sort((a, b) => b.elapsed - a.elapsed).map(task => {
           const taskGoal = Number(task.goal) || 0;
           if (taskGoal <= 0) return "";
           const taskElapsed = Number(task.elapsed) || 0;
