@@ -352,7 +352,7 @@ async function Save(firebase = false) {
     }
   } 
   
-  if (!user || !firebase) {
+  if (!user) {
     localStorage.setItem("timeScales", JSON.stringify(state.timeScales));
     localStorage.setItem("tasks", JSON.stringify(cleanTasks));
     localStorage.setItem("agenda", JSON.stringify(state.agenda));
