@@ -1475,7 +1475,8 @@ function buildAgendaSelector() {
 }
 
 function checkTimeScaleDone() {
-  if (!hasSyncedWithFirebase) return false;
+  console.log("checkTimeScaleDone called");
+  if (auth.currentUser && !hasSyncedWithFirebase) {console.log("hasSyncedWithFirebase is false"); return false;}
   let SomethingChanged = false;
   let nowMs = new Date().getTime();
 
@@ -1553,7 +1554,6 @@ function openTimeScaleStatistics(scaleId) {
     .filter(stat => stat.scaleId === scaleId)
     .sort((a, b) => new Date(a.start) - new Date(b.start));
   
-  
   const currentScale = state.timeScales[scaleId];
   if (currentScale) {
     scaleStats.push({
@@ -1573,8 +1573,23 @@ function openTimeScaleStatistics(scaleId) {
       })
     });
   }
- 
-  
+
+  let runningStreak = 0;
+  scaleStats.forEach(stat => {
+    let totals = (stat.tasks || []).reduce((acc, task) => {
+      acc.elapsed += Math.min(Number(task.elapsed) || 0, Number(task.goal) || 0);
+      acc.goal += Number(task.goal) || 0;
+      return acc;
+    }, { elapsed: 0, goal: 0 });
+
+    if (totals.goal === 0 || totals.elapsed >= totals.goal) {
+      runningStreak++;
+    } else {
+      runningStreak = 0; 
+    }
+    stat.historicalStreak = runningStreak;
+  });
+
   if (scaleStats.length === 1 && scaleStats[0].isPreview) {
     document.getElementById("modal-title").innerText = "Statistics";
     document.getElementById("modal-body").innerHTML = `
@@ -1593,7 +1608,14 @@ function openTimeScaleStatistics(scaleId) {
 
     const styleBlock = `
       <style>
-        .heatmap-square { cursor: pointer; transition: transform 0.1s; }
+        .heatmap-square { 
+          cursor: pointer; 
+          transition: transform 0.1s; 
+          position: relative; 
+          min-width: 0; 
+          min-height: 0;
+          overflow: hidden; 
+        }
         .heatmap-square:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0,0,0,0.3); z-index: 10; }
         
         #global-heatmap-tooltip {
@@ -1629,11 +1651,23 @@ function openTimeScaleStatistics(scaleId) {
             let borderColor = percentage >= 100 ? "hsl(120, 100%, 45%)" : "hsl(0, 100%, 45%)";
             let opacity = stat.isPreview ? "0.6" : "1";
 
+            const streakDisplay = stat.historicalStreak > 0 ? `
+              <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none;">
+                <div class="streak-badge active" style="transform: scale(0.65); transform-origin: center; margin: 0; text-shadow: none;">
+                  <svg class="flame-icon" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 24C17.5228 24 22 19.5228 22 14C22 8 15 2 13 0C13 0 13.5 3 12 5C10.5 7 2 9 2 15C2 19.9706 6.47715 24 12 24Z"/>
+                  </svg>
+                  <span class="streak-number" style="position: relative; top: -2px;">${stat.historicalStreak}</span>
+                </div>
+              </div>
+            ` : '';
+
             return `
               <div 
               class="heatmap-square time-scale" 
               data-index="${index}"
-              style="margin: 0; border-radius: 6px; border: 2px ${borderStyle} ${borderColor}; background-color: hsl(${hue}, 100%, 45%); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15); aspect-ratio: 1; opacity: ${opacity};">
+              style="margin: 0; border-radius: 6px; border: 2px ${borderStyle} ${borderColor}; background-color: hsl(${hue}, 100%, 45%); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15); aspect-ratio: 1; opacity: ${opacity}; display: flex; align-items: center; justify-content: center; color: white;">
+                ${streakDisplay}
               </div>
             `
           }).join("")
@@ -1739,7 +1773,6 @@ function openTimeScaleStatistics(scaleId) {
       });
     });
   }
-
 
   document.getElementById("modal-cancel").style.display = "none";
   document.getElementById("btn-submit").innerText = "Close";
