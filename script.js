@@ -185,6 +185,7 @@ function setupFirebaseListener() {
     
     if (isSavingLocally) {
       isSavingLocally = false; 
+      hasSyncedWithFirebase = true;
       return; 
     }
     
@@ -857,7 +858,7 @@ function deleteTask(id) {
 function createNewSubtask(taskId) {
   let task = state.tasks[taskId];
   let subtaskName = prompt("What do you need to do?");
-  
+  lastTick = performance.now();
   if (subtaskName && subtaskName.trim() !== "") {
     let subtaskId = crypto.randomUUID();
     task.subtasks[subtaskId] = { id: subtaskId, name: subtaskName, done: false };
