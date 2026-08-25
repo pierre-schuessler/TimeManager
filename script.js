@@ -337,6 +337,7 @@ async function Save(firebase = false) {
         document.querySelector(".close-btn").style.display = "none";
         document.getElementById("btn-submit").onclick = function() { location.reload() };
         openModal("modal");
+        return;
     };
     isSavingLocally = true; 
     try {
