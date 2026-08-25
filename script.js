@@ -1640,7 +1640,7 @@ function openTimeScaleStatistics(scaleId) {
         }
         ${
           Array.from({ length: emptySlotsCount }).map(() => `
-            <div style="margin: 0; border-radius: 6px; background-color: #f0f0f0; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.05); aspect-ratio: 1;"></div>
+            <div class="heatmap-square" style="margin: 0; border-radius: 6px; background-color: #f0f0f0; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.05); aspect-ratio: 1;"></div>
           `).join("")
         }
       </div>
@@ -1658,6 +1658,11 @@ function openTimeScaleStatistics(scaleId) {
     squares.forEach(square => {
       square.addEventListener("mouseenter", (e) => {
         const index = e.target.getAttribute("data-index");
+        if (!index){
+          tooltip.innerHTML = `<div style="text-align: center; color: #666; padding: 20px 10px;">No data available<br>When this time scale is over, you will see your work here</div>`;
+          tooltip.style.opacity = "1";
+          return;
+        }
         const stat = scaleStats[index];
         
         let totals = (stat.tasks || []).reduce((acc, task) => {
