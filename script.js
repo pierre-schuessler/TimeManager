@@ -882,17 +882,6 @@ function toggleSubtask(taskId, subtaskId) {
     clearTimeout(subtask.deleteTimeout);
   }
   
-  const user = auth.currentUser;
-  if (user) {
-    isSavingLocally = true;
-    let cleanSubtasks = {};
-    Object.values(task.subtasks).forEach((st) => {
-      let { deleteTimeout, ...cleanSubtask } = st;
-      cleanSubtasks[st.id] = cleanSubtask;
-    });
-    update(ref(db, `users/${user.uid}/tasks/${task.id}`), { subtasks: cleanSubtasks });
-    Save(false);
-  } else { Save(true); }
   RenderTasks();
 }
 
