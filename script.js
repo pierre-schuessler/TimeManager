@@ -39,11 +39,13 @@ onAuthStateChanged(auth, async (user) => {
   
   if (user) {
     openLoginButton.textContent = "Log out"
+    openLoginButton.setAttribute('title', 'Log out of your account')
     openLoginButton.setAttribute('onclick','Logout()')
     migrateButton.style.display = "";
     setupFirebaseListener()
   } else {
     openLoginButton.textContent = "Log in"
+    openLoginButton.setAttribute('title', 'Log in or register an account')
     openLoginButton.setAttribute('onclick','openLogin()')
     migrateButton.style.display = "none";
   }
@@ -1786,7 +1788,7 @@ function openHelp(){
 
       <h4 style="margin-bottom: 5px;">Setting Your Timeframes</h4>
       <p style="margin-top: 0; font-size: 0.95em;">
-        Start by setting up throught which time frames (daily, weekly, etc.) you want to set goals for. You can always tweak the duration and start date later by clicking the gear icon. As you work, the app will automatically measure your progress against these broader periods.
+        Start by setting up throught which time scales (daily, weekly, etc.) you want to set goals for. You can always tweak the duration and start date later by clicking the gear icon. As you work, the app will automatically measure your progress against these periods.
       </p>
 
       <h4 style="margin-bottom: 5px;">Working on Tasks</h4>
