@@ -516,17 +516,96 @@ timerWorker.onmessage = function(e) {
       }, { elapsed: 0, goal: 0 });
 
       const isCompleted = totals.goal > 0 && totals.elapsed >= totals.goal;
-      if (isCompleted && !prevScaleCompletion[scale.id]) { scaleFinished = true; }
+      if (isCompleted && !prevScaleCompletion[scale.id]) { scaleFinished = scale.id; }
     });
 
     if (anyCrossed) ding(1);
     if (isAllCompleted && !wasAllCompleted) ding(2);
-    if (scaleFinished) ding(3);
+    if (scaleFinished) {
+      ding(3);
+      streakIncreaseAnimation(scaleFinished);
+    };
 
     UpdateTasksRender();
     Save(false);
   }
 };
+
+function streakIncreaseAnimation(scaleId) {
+  const scale = state.timeScales[scaleId];
+  if (!scale) return;
+
+  
+  const totals = Object.values(state.tasks).reduce((acc, t) => {
+    acc.elapsed += Math.min(Number(t.times[scaleId]?.elapsed) || 0, Number(t.times[scaleId]?.goal) || 0);
+    acc.goal += Number(t.times[scaleId]?.goal) || 0;
+    return acc;
+  }, { elapsed: 0, goal: 0 });
+  
+  const taskPercentage = totals.goal > 0 ? (totals.elapsed / totals.goal) * 100 : 100;
+  const newStreak = getTimeScaleStreak(scaleId) + (taskPercentage >= 100 ? 1 : 0);
+  const oldStreak = Math.max(0, newStreak - 1);
+
+  
+  const overlay = document.createElement('div');
+  overlay.className = 'streak-overlay';
+
+  const content = document.createElement('div');
+  content.className = 'streak-content';
+
+  const title = document.createElement('h2');
+  title.className = 'streak-scale-name';
+  title.innerText = `${scale.name} Complete!`;
+
+  const ringContainer = document.createElement('div');
+  ringContainer.className = 'streak-ring-container';
+
+  
+  ringContainer.innerHTML = `
+    <svg class="progress-ring" width="300" height="300">
+      <circle class="ring-bg" cx="150" cy="150" r="130" stroke-width="12" fill="transparent"/>
+      <circle class="ring-fill" cx="150" cy="150" r="130" stroke-width="12" fill="transparent"/>
+    </svg>
+    <div class="streak-anim-badge">
+      <svg class="streak-anim-svg" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 24C17.5228 24 22 19.5228 22 14C22 8 15 2 13 0C13 0 13.5 3 12 5C10.5 7 2 9 2 15C2 19.9706 6.47715 24 12 24Z"/>
+      </svg>
+      <span class="streak-anim-number">${oldStreak}</span>
+    </div>
+  `;
+
+  const text = document.createElement('div');
+  text.className = 'streak-text';
+  text.innerText = 'Streak Increased!';
+
+  content.appendChild(title);
+  content.appendChild(ringContainer);
+  content.appendChild(text);
+  overlay.appendChild(content);
+  document.body.appendChild(overlay);
+
+  
+  void overlay.offsetWidth; 
+  overlay.classList.add('active');
+
+  const ringFill = ringContainer.querySelector('.ring-fill');
+  const badge = ringContainer.querySelector('.streak-anim-badge');
+  const numberEl = ringContainer.querySelector('.streak-anim-number');
+
+  setTimeout(() => {
+    ringFill.style.strokeDashoffset = '0'; 
+  }, 300);
+
+  setTimeout(() => {
+    numberEl.innerText = newStreak;
+    badge.classList.add('streak-bump');
+  }, 1800); 
+
+  setTimeout(() => {
+    overlay.classList.remove('active');
+    setTimeout(() => overlay.remove(), 400); 
+  }, 5000);
+}
 
 async function toggleTask(id, UITarget) {
   let task = state.tasks[id];
@@ -654,21 +733,69 @@ function snapSession(taskId) {
 
   let firstScaleId = Object.keys(state.timeScales)[0];
   let currentElapsed = task.times[firstScaleId].elapsed;
+  
+  let anyCrossed = false;
+  let isAllCompleted = true;
+  let wasAllCompleted = Object.values(state.timeScales).every(scale =>
+    task.times[scale.id].elapsed >= task.times[scale.id].goal
+  );
+
+  const prevScaleCompletion = {};
+  Object.values(state.timeScales).forEach(scale => {
+    const totals = Object.values(state.tasks).reduce((acc, t) => {
+      acc.elapsed += Math.min(Number(t.times[scale.id]?.elapsed) || 0, Number(t.times[scale.id]?.goal) || 0);
+      acc.goal += Number(t.times[scale.id]?.goal) || 0;
+      return acc;
+    }, { elapsed: 0, goal: 0 });
+    prevScaleCompletion[scale.id] = totals.goal > 0 && totals.elapsed >= totals.goal;
+  });
 
   Object.keys(state.timeScales).forEach(scaleId => {
     if(task.times[scaleId]) {
       let currentSessions = task.times[scaleId].sessions || 0;
       let newSessions = currentSessions + 1;
+      
+      let oldElapsed = task.times[scaleId].elapsed;
+      let newElapsed = newSessions * task.sessionDuration;
+      let goal = task.times[scaleId].goal;
+
+      if (oldElapsed < goal && newElapsed >= goal) {
+        anyCrossed = true;
+      }
+      
+      if (newElapsed < goal) {
+        isAllCompleted = false;
+      }
+
       task.times[scaleId].sessions = newSessions;
-      task.times[scaleId].elapsed = newSessions * task.sessionDuration;
+      task.times[scaleId].elapsed = newElapsed;
     }
   });
 
   let targetElapsed = task.times[firstScaleId].elapsed;
   let gap = targetElapsed - currentElapsed;
-
   syncAgendaGap(taskId, gap);
   
+  let scaleFinished = false;
+  Object.values(state.timeScales).forEach(scale => {
+    const totals = Object.values(state.tasks).reduce((acc, t) => {
+      acc.elapsed += Math.min(Number(t.times[scale.id]?.elapsed) || 0, Number(t.times[scale.id]?.goal) || 0);
+      acc.goal += Number(t.times[scale.id]?.goal) || 0;
+      return acc;
+    }, { elapsed: 0, goal: 0 });
+
+    const isCompleted = totals.goal > 0 && totals.elapsed >= totals.goal;
+    if (isCompleted && !prevScaleCompletion[scale.id]) { 
+      scaleFinished = scale.id; 
+    }
+  });
+
+  if (anyCrossed) ding(1);
+  if (isAllCompleted && !wasAllCompleted) ding(2);
+  if (scaleFinished) {ding(3);
+    streakIncreaseAnimation(scaleFinished);
+  }
+
   Save(true);
   RenderTasks();
   RenderAgenda();
@@ -932,7 +1059,7 @@ function RenderTasks() {
                   let labelMiddle = `${progress.toFixed(1)}%`;
                   let labelRight = `${new Date(task.times[scale.id].elapsed * 1000).toISOString().substring(11, 19)} / ${new Date(task.times[scale.id].goal * 1000).toISOString().substring(11, 19)}`;
                   if (task.isHabit) {
-                    labelMiddle = `Sessions: ${task.times[scale.id].sessions} / ${task.times[scale.id].targetSessions}`;
+                    labelMiddle = `${task.times[scale.id].sessions} / ${task.times[scale.id].targetSessions}`;
                     labelRight = `${new Date(task.times[scale.id].elapsed * 1000).toISOString().substring(11, 19)}`;
                   } else {
                     labelRight += ` (${new Date(Math.max(0, task.times[scale.id].goal - task.times[scale.id].elapsed) * 1000).toISOString().substring(11, 19)} left)`;
@@ -982,7 +1109,7 @@ function UpdateTasksRender() {
       let metaSpans = row.querySelectorAll(".task-progress-meta span");
       if (metaSpans.length >= 3) {
         if (task.isHabit) {
-          metaSpans[1].textContent = `Sessions: ${task.times[scale.id].sessions} / ${task.times[scale.id].targetSessions}`;
+          metaSpans[1].textContent = `${task.times[scale.id].sessions} / ${task.times[scale.id].targetSessions}`;
           metaSpans[2].textContent = `${new Date(task.times[scale.id].elapsed * 1000).toISOString().substring(11, 19)}`;
         } else {
           metaSpans[1].textContent = `${progress.toFixed(1)}%`;
@@ -1275,6 +1402,14 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
           break;
       }
     });
+    const streakCount = getTimeScaleStreak(scale.id) + (taskPercentage >= 100 ? 1 : 0);
+    const streakBadge = timeScaleContainer.querySelector(".streak-badge");
+    if (streakBadge) {
+      streakBadge.classList.toggle("active", streakCount > 0);
+      streakBadge.classList.toggle("inactive", streakCount === 0);
+      const streakNumber = streakBadge.querySelector(".streak-number");
+      if (streakNumber) streakNumber.textContent = streakCount;
+    }
   });
 }
 
