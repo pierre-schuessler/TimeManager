@@ -1988,7 +1988,7 @@ function openTimeScaleStatistics(scaleId) {
             let borderColor = percentage >= 100 ? "hsl(120, 100%, 45%)" : "hsl(0, 100%, 45%)";
 
             let opacity = "1";
-            if (stat.isPreview && currentScale) {
+            if (stat.isPreview && currentScale && percentage < 100) {
               const scaleStartMs = new Date(currentScale.start).getTime();
               const scaleDurationMs = (Number(currentScale.duration) || 0) * 24 * 60 * 60 * 1000;
               const elapsedMs = Math.max(0, Date.now() - scaleStartMs);
