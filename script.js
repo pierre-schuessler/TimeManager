@@ -1596,7 +1596,8 @@ function updateCurrentTimeLine() {
   if (!line) {
     line = document.createElement("div");
     line.id = "current-time-line";
-    line.title = "Current time";
+    line.title = "Current time line — live marker for the current clock time.";
+    line.setAttribute("aria-label", "Current time line");
     line.style.position = "absolute";
     line.style.height = "2px";
     line.style.backgroundColor = "#ff4d4d";
@@ -1645,8 +1646,7 @@ function updateCurrentTimeLine() {
 
   document.querySelectorAll(".zero-free-time-line").forEach(el => el.remove());
 
-  const colors = ["#ff9800", "#2196F3", "#9C27B0", "#4CAF50", "#E91E63", "#00BCD4"];
-  let colorIndex = 0;
+  const freeTimeLimitColor = "#ff9800";
 
   Object.values(state.timeScales).forEach(scale => {
     const scaleEndMs = new Date(scale.start).getTime() + (scale.duration * 24 * 60 * 60 * 1000);
@@ -1721,19 +1721,17 @@ function updateCurrentTimeLine() {
         }
 
         if (zTargetCell) {
-          const scaleColor = colors[colorIndex % colors.length];
           let zeroLine = document.createElement("div");
           zeroLine.className = "zero-free-time-line";
-          zeroLine.title = "Point of no return: " + scale.name;
+          zeroLine.title = `Free-time limit for ${scale.name} — this is the point where you will have to start in order to reach your goals before the scale ends.`;
+          zeroLine.setAttribute("aria-label", `Free-time limit for ${scale.name}`);
           zeroLine.style.position = "absolute";
           zeroLine.style.height = "2px";
-          zeroLine.style.backgroundColor = scaleColor; 
+          zeroLine.style.backgroundColor = freeTimeLimitColor; 
           zeroLine.style.pointerEvents = "auto";
           zeroLine.style.zIndex = "49";
           zeroLine.style.cursor = "help";
-          
-          const dotOffset = -4 - (colorIndex * 4);
-          zeroLine.innerHTML = `<div style="width: 8px; height: 8px; background: ${scaleColor}; border-radius: 50%; position: absolute; top: -3px; left: ${dotOffset}px;"></div>`;
+          zeroLine.innerHTML = `<div style="width: 8px; height: 8px; background: ${freeTimeLimitColor}; border-radius: 50%; position: absolute; top: -3px; left: -4px;"></div>`;
           
           zeroLine.style.display = "block";
           zeroLine.style.top = zExactY + "px";
@@ -1741,7 +1739,6 @@ function updateCurrentTimeLine() {
           zeroLine.style.width = zTargetCell.offsetWidth + "px";
           
           container.appendChild(zeroLine);
-          colorIndex++;
         }
       }
     }
