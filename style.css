@@ -64,6 +64,13 @@ main {
     grid-template-columns: 1fr 1fr;
     gap: var(--spacing-xl);
     margin: var(--spacing-xl) 0px;
+    transition: filter 0.4s ease;
+}
+
+main.give-up-locked {
+    filter: blur(10px);
+    pointer-events: none;
+    user-select: none;
 }
 
 main > div {
@@ -375,6 +382,44 @@ h3 {
 .btn-success {
     background-color: green;
     color: white;
+}
+
+.give-up-lockout-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 30;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+}
+
+.give-up-lockout-overlay.visible {
+    opacity: 1;
+}
+
+.give-up-lockout-card {
+    background: rgba(15, 23, 42, 0.8);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 999px;
+    padding: 1rem 2rem;
+    text-align: center;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.25);
+}
+
+.give-up-lockout-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+}
+
+.give-up-lockout-subtitle {
+    margin-top: 0.4rem;
+    font-size: 0.9rem;
+    opacity: 0.9;
 }
 
 .form-group {

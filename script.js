@@ -21,6 +21,9 @@ const db = getDatabase(app);
 
 let hasSyncedWithFirebase = false;
 
+const GIVE_UP_LOCKOUT_MS = 7 * 24 * 60 * 60 * 1000;
+let giveUpLockoutInterval = null;
+
 let state = {
   tasks: {},
   timeScales: {},
@@ -30,6 +33,126 @@ let state = {
 
 function getSafeIsoString(date) {
   return date.toISOString().split('.')[0] + 'Z';
+}
+
+function isRealProgressStat(stat) {
+  return !!stat && typeof stat === 'object' && stat.name !== 'User Gave Up';
+}
+
+function getGiveUpEvents() {
+  return Object.values(state.statistics || {})
+    .filter(stat => stat && typeof stat === 'object' && stat.name === 'User Gave Up' && stat.start)
+    .sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime());
+}
+
+function formatGiveUpCountdown(ms) {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  const parts = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0 || days > 0) parts.push(`${hours}h`);
+  if (minutes > 0 || hours > 0 || days > 0) parts.push(`${minutes}m`);
+  parts.push(`${seconds}s`);
+
+  return parts.join(' ');
+}
+
+function clearGiveUpLockout() {
+  const mainElement = document.querySelector('main');
+  const overlay = document.getElementById('give-up-lockout-overlay');
+  const giveUpButton = document.getElementById('btn-give-up');
+  if (mainElement) mainElement.classList.remove('give-up-locked');
+  if (overlay) {
+    overlay.classList.remove('visible');
+    setTimeout(() => overlay.remove(), 400);
+  }
+  if (giveUpButton) giveUpButton.disabled = false;
+  if (giveUpLockoutInterval) {
+    clearInterval(giveUpLockoutInterval);
+    giveUpLockoutInterval = null;
+  }
+}
+
+function showGiveUpReminder() {
+  const giveUpEvents = getGiveUpEvents();
+  if (giveUpEvents.length === 0) {
+    clearGiveUpLockout();
+    return;
+  }
+  
+
+  const latestGiveUp = new Date(giveUpEvents[0].start).getTime();
+  const remainingMs = latestGiveUp + GIVE_UP_LOCKOUT_MS - Date.now();
+
+  if (remainingMs <= 0) {
+    clearGiveUpLockout();
+    return;
+  }
+
+  const giveUpButton = document.getElementById('btn-give-up');
+  if (giveUpButton) giveUpButton.disabled = true;
+
+  const mainElement = document.querySelector('main');
+  if (!mainElement) return;
+
+  let overlay = document.getElementById('give-up-lockout-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'give-up-lockout-overlay';
+    overlay.className = 'give-up-lockout-overlay';
+    document.body.appendChild(overlay);
+  }
+
+  const updateLockoutDisplay = () => {
+    const currentGiveUpEvents = getGiveUpEvents();
+    if (currentGiveUpEvents.length === 0) {
+      clearGiveUpLockout();
+      return;
+    }
+
+    const latest = new Date(currentGiveUpEvents[0].start).getTime();
+    const nextRemainingMs = latest + GIVE_UP_LOCKOUT_MS - Date.now();
+    if (nextRemainingMs <= 0) {
+      clearGiveUpLockout();
+      return;
+    }
+
+    mainElement.classList.add('give-up-locked');
+    overlay.innerHTML = `
+      <div class="give-up-lockout-card">
+        <div class="give-up-lockout-title">Rest now.</div>
+        <div class="give-up-lockout-title">You can start working again in <span id="give-up-lockout-countdown">${formatGiveUpCountdown(nextRemainingMs)}</span></div>
+        <div class="give-up-lockout-subtitle">You have given up ${currentGiveUpEvents.length} ${currentGiveUpEvents.length === 1 ? 'time' : 'times'}.</div>
+      </div>
+    `;
+    requestAnimationFrame(() => overlay.classList.add('visible'));
+  };
+
+  updateLockoutDisplay();
+
+  if (giveUpLockoutInterval) clearInterval(giveUpLockoutInterval);
+  giveUpLockoutInterval = setInterval(() => {
+    const currentGiveUpEvents = getGiveUpEvents();
+    if (currentGiveUpEvents.length === 0) {
+      clearGiveUpLockout();
+      return;
+    }
+
+    const latest = new Date(currentGiveUpEvents[0].start).getTime();
+    const nextRemainingMs = latest + GIVE_UP_LOCKOUT_MS - Date.now();
+    const countdownEl = document.getElementById('give-up-lockout-countdown');
+    if (countdownEl) {
+      countdownEl.textContent = formatGiveUpCountdown(nextRemainingMs);
+    }
+
+    if (nextRemainingMs <= 0) {
+      clearGiveUpLockout();
+    }
+  }, 1000);
 }
 
 onAuthStateChanged(auth, async (user) => {
@@ -219,6 +342,8 @@ function setupFirebaseListener() {
       state.agenda = fbData.agenda || {};
       state.statistics = fbData.statistics || {};
 
+      showGiveUpReminder();
+
       let isRunningNow = Object.values(state.tasks).find(t => t.running);
 
       if (isRunningNow && (!wasRunning || wasRunning.id !== isRunningNow.id)) {
@@ -299,6 +424,7 @@ async function Load() {
   });
 
   state.statistics = rawData.statistics ? JSON.parse(rawData.statistics) : {};
+  showGiveUpReminder();
 }
 
 async function Save(firebase = false) {
@@ -1200,7 +1326,7 @@ function formatDuration(ms) {
 
 function getTimeScaleStreak(scaleId) {
   const scaleStats = Object.values(state.statistics)
-    .filter(stat => stat.scaleId === scaleId)
+    .filter(stat => isRealProgressStat(stat) && stat.scaleId === scaleId)
     .sort((a,b) => new Date(b.start) - new Date(a.start)); 
 
   let streakInScales = 0;
@@ -1603,10 +1729,10 @@ function buildAgendaSelector() {
 }
 
 function checkTimeScaleDone() {
-  console.log("checkTimeScaleDone called");
-  if (auth.currentUser && !hasSyncedWithFirebase) {console.log("hasSyncedWithFirebase is false"); return false;}
+  if (auth.currentUser && !hasSyncedWithFirebase) return false;
   let SomethingChanged = false;
   let nowMs = new Date().getTime();
+  let lostScales = [];
 
   Object.values(state.timeScales).forEach((scale) => {
     const scaleDurationMs = scale.duration * 24 * 60 * 60 * 1000;
@@ -1615,6 +1741,8 @@ function checkTimeScaleDone() {
     if (scaleStartMs + scaleDurationMs <= nowMs) {
       SomethingChanged = true;
       let isFirstMissedCycle = true;
+      let missedThisCheck = false;
+      let streakBeforeMiss = getTimeScaleStreak(scale.id);
 
       while (scaleStartMs + scaleDurationMs <= nowMs) {
         const totals = Object.values(state.tasks).reduce((acc, task) => {
@@ -1622,6 +1750,10 @@ function checkTimeScaleDone() {
           acc.goal += Number(task.times[scale.id]?.goal) || 0;
           return acc;
         }, { elapsed: 0, goal: 0 });
+
+        if (totals.goal > 0 && totals.elapsed < totals.goal) {
+          missedThisCheck = true;
+        }
 
         const statId = crypto.randomUUID();
         state.statistics[statId] = {
@@ -1645,6 +1777,8 @@ function checkTimeScaleDone() {
         scaleStartMs += scaleDurationMs;
         isFirstMissedCycle = false;
       }
+
+      if (missedThisCheck) lostScales.push({ id: scale.id, lostStreak: streakBeforeMiss });
 
       let finalDate = new Date(scaleStartMs);
       finalDate.setHours(0, 0, 0, 0);
@@ -1673,13 +1807,88 @@ function checkTimeScaleDone() {
     RenderAgenda(); 
   }
   
+  lostScales.forEach((scaleData, index) => {
+    setTimeout(() => streakLostAnimation(scaleData.id, scaleData.lostStreak), index * 5500);
+  });
+
   return SomethingChanged;
+}
+
+function streakLostAnimation(scaleId, lostStreak) {
+  const scale = state.timeScales[scaleId];
+  if (!scale) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'streak-overlay';
+  overlay.style.backgroundColor = 'rgba(20, 20, 20, 0.95)'; 
+
+  const content = document.createElement('div');
+  content.className = 'streak-content';
+
+  const title = document.createElement('h2');
+  title.className = 'streak-scale-name';
+  title.innerText = `${scale.name} missed`;
+  title.style.color = '#ff6b6b';
+
+  const ringContainer = document.createElement('div');
+  ringContainer.className = 'streak-ring-container';
+
+  ringContainer.innerHTML = `
+    <svg class="progress-ring" width="300" height="300">
+      <circle class="ring-bg" cx="150" cy="150" r="130" stroke-width="12" fill="transparent"/>
+      <circle class="ring-fill" cx="150" cy="150" r="130" stroke-width="12" fill="transparent" style="stroke: #ff6b6b; stroke-dashoffset: 0; transition: stroke-dashoffset 1.5s ease-in-out;"/>
+    </svg>
+    <div class="streak-anim-badge" style="color: #ff6b6b; transition: all 0.5s ease;">
+      <svg class="streak-anim-svg" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 24C17.5228 24 22 19.5228 22 14C22 8 15 2 13 0C13 0 13.5 3 12 5C10.5 7 2 9 2 15C2 19.9706 6.47715 24 12 24Z"/>
+      </svg>
+      <span class="streak-anim-number" style="transition: opacity 0.3s;">${lostStreak}</span>
+    </div>
+  `;
+
+  
+
+  content.appendChild(title);
+  content.appendChild(ringContainer);
+  if (lostStreak > 0) {
+    const text = document.createElement('div');
+    text.className = 'streak-text';
+    text.innerText = 'Streak Lost';
+    text.style.color = '#ff6b6b';
+    content.appendChild(text);
+  }
+  
+  overlay.appendChild(content);
+  document.body.appendChild(overlay);
+
+  void overlay.offsetWidth; 
+  overlay.classList.add('active');
+
+  const ringFill = ringContainer.querySelector('.ring-fill');
+  const badge = ringContainer.querySelector('.streak-anim-badge');
+  const numberEl = ringContainer.querySelector('.streak-anim-number');
+
+  setTimeout(() => {
+    const circumference = 130 * 2 * Math.PI;
+    ringFill.style.strokeDashoffset = circumference; 
+  }, 300);
+
+  setTimeout(() => {
+    numberEl.innerText = '0';
+    badge.style.transform = 'scale(0.85)';
+    badge.style.opacity = '0.6';
+  }, 1800); 
+
+  setTimeout(() => {
+    overlay.classList.remove('active');
+    setTimeout(() => overlay.remove(), 400); 
+  }, 5000);
 }
 
 
 function openTimeScaleStatistics(scaleId) {
   const scaleStats = Object.values(state.statistics)
-    .filter(stat => stat.scaleId === scaleId)
+    .filter(stat => isRealProgressStat(stat) && stat.scaleId === scaleId)
     .sort((a, b) => new Date(a.start) - new Date(b.start));
   
   const currentScale = state.timeScales[scaleId];
@@ -1955,11 +2164,77 @@ function openHelp(){
   openModal("modal");
 }
 
+function giveUp() {
+  const totalGiveUps = getGiveUpEvents().length;
+  const totalGiveUpsText = totalGiveUps === 1 ? '1 time' : `${totalGiveUps} times`;
+
+  document.getElementById("modal-title").innerText = "Give up?";
+  document.getElementById("modal-body").innerHTML = `
+  <div>
+    ${totalGiveUps === 0 ? '' : `<p style="margin-top: 0; font-size: 0.95em; color: #d9534f;">
+      Warning: You have already given up ${totalGiveUpsText}.
+    </p>`}
+    
+    <p style="margin-top: 0; font-size: 0.95em;">
+      On May 17, 2014, Admiral McRaven gave a speech at the University of Texas at Austin, where he shared 10 lessons he learned from Navy SEAL training. The last one is the most important.
+    </p>
+    <p style="margin-top: 0; font-size: 0.95em;">
+      "Finally, in SEAL training there is a bell. A brass bell that hangs in the center of the compound for all the students to see. All you have to do to quit is ring the bell, ring the bell, and you no longer have to wake up at five o'clock ring the bell and you no longer have to be in the freezing cold swims. Ring the bell and you no longer have to do the runs, the obstacle course, the PT, and you no longer have to endure the hardships of training. All you have to do is ring the bell to get out. If you want to change the world, don't ever, ever ring the bell."
+    </p>
+    <p style="margin-top: 0; font-size: 0.95em;">
+      Here is that very bell. You can ring it at any time, and you won't have to work on your tasks anymore.
+    </p>
+    <p style="margin-top: 0; font-size: 0.95em;">
+      But remember, this action cannot be undone. You must make that choice now.
+    </p>
+    <div style="align-items: center; display: flex; flex-direction: column; margin-top: 20px;">
+      <input type="text" autocomplete="off" id="give-up-confirmation" placeholder="Type 'I give up' to confirm" style="border: 1px solid red; color: red; font-weight: bold; width: 100%; padding: 8px; margin-top: 10px; box-sizing: border-box; margin-bottom: 10px; text-align: center;" />
+      <button class="btn btn-primary" id="btn-give-up-bell" style="width: 100%; background-color: red;">🔔</button>
+    </div>
+  </div>`;
+  document.getElementById("btn-submit").style.display = "none";
+  document.getElementById("btn-give-up-bell").onclick = async function() {
+    const confirmationInput = document.getElementById("give-up-confirmation");
+    if (confirmationInput.value.trim().toLowerCase() === "i give up") {
+      const statId = crypto.randomUUID();
+      state.statistics[statId] = {
+        id: statId,
+        scaleId: null,
+        name: "User Gave Up",
+        timeWorked: 0,
+        goal: 0,
+        duration: 0,
+        start: new Date().toISOString(),
+        tasks: []
+      };
+      let runningTask = Object.values(state.tasks).find(t => t.running);
+      if (runningTask) {
+        toggleTask(runningTask.id, null); 
+      }
+      ring();
+      Save(true);
+      showGiveUpReminder();
+    }
+    closeModal("modal");
+  }
+  openModal("modal");
+}
+
 const openModal = (id) => document.getElementById(id).classList.add('active');
 const closeModal = (id) => {
   document.getElementById("delete-button")?.remove();
   document.getElementById("move-up-button")?.remove();
-  document.getElementById("modal-cancel").style.display = "";
+  const submitButton = document.getElementById("btn-submit");
+  const cancelButton = document.getElementById("modal-cancel");
+
+  if (submitButton) {
+    submitButton.style.display = "";
+    submitButton.disabled = false;
+    submitButton.innerText = "";
+    submitButton.onclick = null;
+  }
+
+  if (cancelButton) cancelButton.style.display = "";
   document.getElementById(id).classList.remove('active');
 };
 
@@ -1981,3 +2256,4 @@ window.editTimeScale = editTimeScale;
 window.deleteTimeScale = deleteTimeScale;
 window.openModal = openModal;
 window.openTimeScaleStatistics = openTimeScaleStatistics; 
+window.giveUp = giveUp;
