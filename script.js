@@ -1440,19 +1440,22 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
   const requiredWorkTodayMs = getRequiredWorkByDeadlineMs(endOfDay);
   const todayWorkableRemainingMs = getWorkableTimeBetween(now.getTime(), endOfDay);
   const freeTimeWarningThresholdMs = 5 * 60 * 1000;
-  const isLowFreeTimeWarning = requiredWorkTodayMs > 0 && todayWorkableRemainingMs <= freeTimeWarningThresholdMs;
-
+  const isBehindSchedule = requiredWorkTodayMs > 0 && todayWorkableRemainingMs < requiredWorkTodayMs;
+  const isLowFreeTimeWarning = requiredWorkTodayMs > 0 && (todayWorkableRemainingMs <= freeTimeWarningThresholdMs || isBehindSchedule);
   if (isLowFreeTimeWarning) {
     if (!hasRungToday) {
       ring();
       document.getElementById("modal-title").innerText = "Time Alert";
-      document.getElementById("modal-body").innerHTML = `<p>Time to start working on your tasks!</p><p>You have less than 5 minutes of free time left today.</p>`;
+      const lowFreeTimeMessage = todayWorkableRemainingMs <= freeTimeWarningThresholdMs
+        ? `<p>Time to start working on your tasks!</p><p>You have less than 5 minutes of free time left today.</p>`
+        : `<p>Time to start working on your tasks!</p><p>You only have ${formatDuration(todayWorkableRemainingMs)} of workable time left today, but still need ${formatDuration(requiredWorkTodayMs)} to meet your goals.</p>`;
+      document.getElementById("modal-body").innerHTML = lowFreeTimeMessage;
       document.getElementById("btn-submit").innerText = "I'll start working!";
       document.getElementById("btn-submit").onclick = function() { closeModal("modal"); };
       openModal("modal");
       hasRungToday = true;
     }
-  } else if (todayWorkableRemainingMs > freeTimeWarningThresholdMs || requiredWorkTodayMs <= 0) {
+  } else if (requiredWorkTodayMs <= 0 || todayWorkableRemainingMs > Math.max(requiredWorkTodayMs, freeTimeWarningThresholdMs)) {
     hasRungToday = false;
   }
 
