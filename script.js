@@ -1439,21 +1439,22 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
 
   const requiredWorkTodayMs = getRequiredWorkByDeadlineMs(endOfDay);
   const todayWorkableRemainingMs = getWorkableTimeBetween(now.getTime(), endOfDay);
-  const wiggleRoomTodayMs = todayWorkableRemainingMs - requiredWorkTodayMs;
+  const freeTimeWarningThresholdMs = 5 * 60 * 1000;
+  const isLowFreeTimeWarning = requiredWorkTodayMs > 0 && todayWorkableRemainingMs <= freeTimeWarningThresholdMs;
 
-  if (requiredWorkTodayMs > 0) {
-    if (wiggleRoomTodayMs >= 0 && wiggleRoomTodayMs <= 5 * 60 * 1000) {
-      if (!hasRungToday) {
-        ring();
-        document.getElementById("modal-title").innerText = "Time Alert";
-        document.getElementById("modal-body").innerHTML = `<p>Time to start working on your tasks!</p><p>You have less than 5 minutes of free time left today.</p>`;
-        document.getElementById("btn-submit").innerText = "I'll start working!";
-        document.getElementById("btn-submit").onclick = function() { closeModal("modal"); };
-        openModal("modal");
-        hasRungToday = true;
-      }
-    } else if (wiggleRoomTodayMs > 5 * 60 * 1000) { hasRungToday = false; }
-  } else { hasRungToday = false; }
+  if (isLowFreeTimeWarning) {
+    if (!hasRungToday) {
+      ring();
+      document.getElementById("modal-title").innerText = "Time Alert";
+      document.getElementById("modal-body").innerHTML = `<p>Time to start working on your tasks!</p><p>You have less than 5 minutes of free time left today.</p>`;
+      document.getElementById("btn-submit").innerText = "I'll start working!";
+      document.getElementById("btn-submit").onclick = function() { closeModal("modal"); };
+      openModal("modal");
+      hasRungToday = true;
+    }
+  } else if (todayWorkableRemainingMs > freeTimeWarningThresholdMs || requiredWorkTodayMs <= 0) {
+    hasRungToday = false;
+  }
 
   timeScaleContainers.forEach((timeScaleContainer) => {
     let header = timeScaleContainer.querySelector(".time-scale-header > h3");
@@ -1582,6 +1583,7 @@ const getCellBgStyles = (busy, totalSecondsWorked) => {
   
   return styles;
 };
+
 function updateCurrentTimeLine() {
   const container = document.getElementById("root-agenda");
   const table = document.getElementById("agenda-table");
@@ -1591,11 +1593,13 @@ function updateCurrentTimeLine() {
   if (!line) {
     line = document.createElement("div");
     line.id = "current-time-line";
+    line.title = "Current time";
     line.style.position = "absolute";
     line.style.height = "2px";
     line.style.backgroundColor = "#ff4d4d";
-    line.style.pointerEvents = "none";
+    line.style.pointerEvents = "auto";
     line.style.zIndex = "50";
+    line.style.cursor = "help";
     line.innerHTML = '<div style="width: 8px; height: 8px; background: #ff4d4d; border-radius: 50%; position: absolute; top: -3px; left: -4px;"></div>';
     
     container.style.position = "relative"; 
@@ -1603,6 +1607,7 @@ function updateCurrentTimeLine() {
   }
 
   const now = new Date();
+  const todayStr = now.toDateString();
   const hour = now.getHours();
   const minute = now.getMinutes();
   const slotIndex = (hour * 4) + Math.floor(minute / 15);
@@ -1613,7 +1618,6 @@ function updateCurrentTimeLine() {
     const percentDown = remainderMinutes / 15;
     const exactY = table.offsetTop + row.offsetTop + (row.offsetHeight * percentDown);
     
-    const todayStr = now.toDateString();
     let targetCell = null;
     
     for (let i = 1; i < row.cells.length; i++) {
@@ -1632,7 +1636,113 @@ function updateCurrentTimeLine() {
     } else {
       line.style.display = "none";
     }
+  } else {
+    line.style.display = "none";
   }
+
+  document.querySelectorAll(".zero-free-time-line").forEach(el => el.remove());
+
+  const colors = ["#ff9800", "#2196F3", "#9C27B0", "#4CAF50", "#E91E63", "#00BCD4"];
+  let colorIndex = 0;
+
+  Object.values(state.timeScales).forEach(scale => {
+    const scaleEndMs = new Date(scale.start).getTime() + (scale.duration * 24 * 60 * 60 * 1000);
+    let requiredWorkMs = 0;
+    
+    Object.values(state.tasks).forEach(task => {
+      const goal = Number(task.times[scale.id]?.goal) || 0;
+      const elapsed = Number(task.times[scale.id]?.elapsed) || 0;
+      requiredWorkMs += Math.max(0, (goal - elapsed) * 1000);
+    });
+    
+    let zeroTimeMs = null;
+    
+    if (requiredWorkMs > 0) {
+      let timeRemaining = requiredWorkMs;
+      let timeMarker = scaleEndMs;
+      let earliestStart = new Date(scale.start).getTime();
+
+      while (timeRemaining > 0 && timeMarker > earliestStart) {
+        let markerDate = new Date(timeMarker);
+        let minutes = Math.floor(markerDate.getMinutes() / 15) * 15;
+        let slotStart = new Date(markerDate.getFullYear(), markerDate.getMonth(), markerDate.getDate(), markerDate.getHours(), minutes, 0, 0);
+        let slotStartTime = slotStart.getTime();
+
+        let timeInThisSlot;
+        if (timeMarker === slotStartTime) { 
+          timeMarker -= 1; 
+          continue; 
+        } else { 
+          timeInThisSlot = timeMarker - slotStartTime; 
+        }
+
+        let currentSlotIso = getSafeIsoString(slotStart);
+        let isBusy = state.agenda[currentSlotIso] && state.agenda[currentSlotIso].busy;
+
+        if (!isBusy) {
+          if (timeInThisSlot >= timeRemaining) {
+            zeroTimeMs = timeMarker - timeRemaining;
+            timeRemaining = 0;
+          } else {
+            timeRemaining -= timeInThisSlot;
+          }
+        }
+        timeMarker -= timeInThisSlot;
+      }
+      
+      if (timeRemaining > 0) {
+        zeroTimeMs = earliestStart; 
+      }
+    }
+
+    if (zeroTimeMs) {
+      const zeroDate = new Date(zeroTimeMs);
+      const zHour = zeroDate.getHours();
+      const zMinute = zeroDate.getMinutes();
+      const zSlotIndex = (zHour * 4) + Math.floor(zMinute / 15);
+      const zRow = table.rows[zSlotIndex + 1];
+
+      if (zRow) {
+        const zRemainderMinutes = zMinute % 15;
+        const zPercentDown = zRemainderMinutes / 15;
+        const zExactY = table.offsetTop + zRow.offsetTop + (zRow.offsetHeight * zPercentDown);
+
+        let zTargetCell = null;
+        const zeroDateStr = zeroDate.toDateString();
+        for (let i = 1; i < zRow.cells.length; i++) {
+          const cellIso = zRow.cells[i].dataset.iso;
+          if (cellIso && new Date(cellIso).toDateString() === zeroDateStr) {
+            zTargetCell = zRow.cells[i];
+            break;
+          }
+        }
+
+        if (zTargetCell) {
+          const scaleColor = colors[colorIndex % colors.length];
+          let zeroLine = document.createElement("div");
+          zeroLine.className = "zero-free-time-line";
+          zeroLine.title = "Point of no return: " + scale.name;
+          zeroLine.style.position = "absolute";
+          zeroLine.style.height = "2px";
+          zeroLine.style.backgroundColor = scaleColor; 
+          zeroLine.style.pointerEvents = "auto";
+          zeroLine.style.zIndex = "49";
+          zeroLine.style.cursor = "help";
+          
+          const dotOffset = -4 - (colorIndex * 4);
+          zeroLine.innerHTML = `<div style="width: 8px; height: 8px; background: ${scaleColor}; border-radius: 50%; position: absolute; top: -3px; left: ${dotOffset}px;"></div>`;
+          
+          zeroLine.style.display = "block";
+          zeroLine.style.top = zExactY + "px";
+          zeroLine.style.left = (table.offsetLeft + zTargetCell.offsetLeft) + "px";
+          zeroLine.style.width = zTargetCell.offsetWidth + "px";
+          
+          container.appendChild(zeroLine);
+          colorIndex++;
+        }
+      }
+    }
+  });
 }
 
 function RenderAgenda() { 
@@ -1709,6 +1819,7 @@ const isinBox = (target, side1, side2) => {
 }
 
 const updatePreview = (startCellData, currentHoverData) => {
+  updateCurrentTimeLine();
   document.querySelectorAll('.agenda-cell').forEach(cell => {
     const cellData = getDataFromCell(cell);
     const existingSlot = state.agenda[cellData.iso];
