@@ -1568,7 +1568,7 @@ function resetTimes(){
   Save(true); RenderTasks(); RenderTimeScales(); RenderAgenda();
 }
 
-const getCellBgStyles = (busy, totalSecondsWorked, isToday) => {
+const getCellBgStyles = (busy, totalSecondsWorked) => {
   const hasWork = totalSecondsWorked > 0;
   const percent = hasWork ? Math.min(1, totalSecondsWorked / 900) : 0;
   const greenColor = `rgba(76, 255, 80, ${(percent * 0.8) + 0.2})`;
@@ -1579,9 +1579,61 @@ const getCellBgStyles = (busy, totalSecondsWorked, isToday) => {
   else if (hasWork) { styles = { background: '', backgroundColor: greenColor }; } 
   else { styles = { background: '', backgroundColor: 'transparent' }; }
   
-  if (isToday) { styles.borderLeft = '4px solid lightcoral'; styles.borderRight = '4px solid lightcoral'; }
+  
   return styles;
 };
+function updateCurrentTimeLine() {
+  const container = document.getElementById("root-agenda");
+  const table = document.getElementById("agenda-table");
+  if (!container || !table) return;
+
+  let line = document.getElementById("current-time-line");
+  if (!line) {
+    line = document.createElement("div");
+    line.id = "current-time-line";
+    line.style.position = "absolute";
+    line.style.height = "2px";
+    line.style.backgroundColor = "#ff4d4d";
+    line.style.pointerEvents = "none";
+    line.style.zIndex = "50";
+    line.innerHTML = '<div style="width: 8px; height: 8px; background: #ff4d4d; border-radius: 50%; position: absolute; top: -3px; left: -4px;"></div>';
+    
+    container.style.position = "relative"; 
+    container.appendChild(line);
+  }
+
+  const now = new Date();
+  const hour = now.getHours();
+  const minute = now.getMinutes();
+  const slotIndex = (hour * 4) + Math.floor(minute / 15);
+  const row = table.rows[slotIndex + 1]; 
+
+  if (row) {
+    const remainderMinutes = minute % 15;
+    const percentDown = remainderMinutes / 15;
+    const exactY = table.offsetTop + row.offsetTop + (row.offsetHeight * percentDown);
+    
+    const todayStr = now.toDateString();
+    let targetCell = null;
+    
+    for (let i = 1; i < row.cells.length; i++) {
+      const cellIso = row.cells[i].dataset.iso;
+      if (cellIso && new Date(cellIso).toDateString() === todayStr) {
+        targetCell = row.cells[i];
+        break;
+      }
+    }
+
+    if (targetCell) {
+      line.style.display = "block";
+      line.style.top = exactY + "px";
+      line.style.left = (table.offsetLeft + targetCell.offsetLeft) + "px";
+      line.style.width = targetCell.offsetWidth + "px";
+    } else {
+      line.style.display = "none";
+    }
+  }
+}
 
 function RenderAgenda() { 
   const container = document.getElementById("root-agenda");
@@ -1617,7 +1669,6 @@ function RenderAgenda() {
           for (let j = 0; j < longestScaleLengthDays; j++) {
             const timestamp = getTimestamp(j, i);
             const isoString = getSafeIsoString(new Date(timestamp));
-            const isToday = new Date(timestamp).toDateString() === todayStr;
             
             const agendaItem = state.agenda[isoString];
             let totalSecondsWorked = 0; let busy = false;
@@ -1626,7 +1677,7 @@ function RenderAgenda() {
               if (agendaItem.tasksWorked) totalSecondsWorked = Object.values(agendaItem.tasksWorked).reduce((sum, val) => sum + val, 0);
             }
             
-            const bg = getCellBgStyles(busy, totalSecondsWorked, isToday);
+            const bg = getCellBgStyles(busy, totalSecondsWorked);
             let inlineStyleStr = bg.background ? `background: ${bg.background};` : `background-color: ${bg.backgroundColor};`;
             if (bg.borderLeft) inlineStyleStr += ` border-left: ${bg.borderLeft}; border-right: ${bg.borderRight};`;
             
@@ -1639,6 +1690,10 @@ function RenderAgenda() {
     </table>
   `;
   buildAgendaSelector()
+  updateCurrentTimeLine();
+  if (!window.timeLineInterval) {
+    window.timeLineInterval = setInterval(updateCurrentTimeLine, 60000);
+  }
 }
 
 const getDataFromCell = (cell) => {
@@ -1660,8 +1715,8 @@ const updatePreview = (startCellData, currentHoverData) => {
     const totalSecondsWorked = (existingSlot && existingSlot.tasksWorked) ? Object.values(existingSlot.tasksWorked).reduce((sum, val) => sum + val, 0) : 0;
     const isToday = new Date(cellData.iso).toDateString() === new Date().toDateString();
     let bg;
-    if (startCellData && currentHoverData) bg = getCellBgStyles(isinBox(cellData, startCellData, currentHoverData) ? !startCellData.busy : cellData.busy , totalSecondsWorked, isToday);
-    else bg = getCellBgStyles(cellData.busy, totalSecondsWorked, isToday)
+    if (startCellData && currentHoverData) bg = getCellBgStyles(isinBox(cellData, startCellData, currentHoverData) ? !startCellData.busy : cellData.busy , totalSecondsWorked);
+    else bg = getCellBgStyles(cellData.busy, totalSecondsWorked);
     cell.style.background = bg.background;
     cell.style.backgroundColor = bg.backgroundColor;
   });
