@@ -2081,6 +2081,7 @@ function openTimeScaleStatistics(scaleId) {
           <div style="font-weight: bold; font-size: 1.1em; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 6px;">
             ${stat.name} <span style="color: #666; font-size: 0.85em; font-weight: normal; float: right; margin-top: 2px;">${dateRange}</span>
           </div>
+          ${stat.tasks && stat.tasks.length > 0 ? `
           <div class="tt-task-row" style="font-weight: bold; margin-top: 10px;">
             <span>Total Completion</span>
             <span>${formatDuration(totals.elapsed * 1000)} / ${formatDuration(totals.goal * 1000)} <span style="margin-left: 5px;">${percentage.toFixed(1)}%</span></span>
@@ -2088,7 +2089,7 @@ function openTimeScaleStatistics(scaleId) {
           <div class="tt-progress-bar" style="margin-bottom: 15px; height: 10px;">
             <div class="tt-progress-fill" style="width: ${Math.min(100, percentage)}%; background-color: hsl(${hue}, 100%, 45%);"></div>
           </div>
-          <div style="color: #999; margin-bottom: 6px; font-size: 0.75em; text-transform: uppercase; letter-spacing: 0.5px;">Task Breakdown</div>
+          <div style="font-weight: bold; margin-bottom: 6px;">Task Breakdown</div>` : '<div style="text-align: center; color: #666; padding: 10px 0;">No tasks recorded for this time scale.</div><div style="text-align: center; color: #666; padding: 10px 0;">By definition, you have done all of your tasks.</div>'}
           ${tasksHtml}
         `;
         
