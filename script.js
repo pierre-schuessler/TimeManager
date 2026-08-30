@@ -1723,7 +1723,7 @@ function updateCurrentTimeLine() {
         if (zTargetCell) {
           let zeroLine = document.createElement("div");
           zeroLine.className = "zero-free-time-line";
-          zeroLine.title = `Free-time limit for ${scale.name} — this is the point where you will have to start in order to reach your goals before the scale ends.`;
+          zeroLine.title = `Free-time limit for ${scale.name} — this is the point where you will have to start working in order to reach your goals before the scale ends.`;
           zeroLine.setAttribute("aria-label", `Free-time limit for ${scale.name}`);
           zeroLine.style.position = "absolute";
           zeroLine.style.height = "2px";
