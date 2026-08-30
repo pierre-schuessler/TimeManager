@@ -1986,7 +1986,15 @@ function openTimeScaleStatistics(scaleId) {
             
             let borderStyle = stat.isPreview ? "dashed" : "solid";
             let borderColor = percentage >= 100 ? "hsl(120, 100%, 45%)" : "hsl(0, 100%, 45%)";
-            let opacity = stat.isPreview ? "0.6" : "1";
+
+            let opacity = "1";
+            if (stat.isPreview && currentScale) {
+              const scaleStartMs = new Date(currentScale.start).getTime();
+              const scaleDurationMs = (Number(currentScale.duration) || 0) * 24 * 60 * 60 * 1000;
+              const elapsedMs = Math.max(0, Date.now() - scaleStartMs);
+              const elapsedRatio = scaleDurationMs > 0 ? Math.min(1, Math.max(0, elapsedMs / scaleDurationMs)) : 1;
+              opacity = elapsedRatio.toFixed(3);
+            }
 
             const streakDisplay = stat.historicalStreak > 0 ? `
               <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none;">
