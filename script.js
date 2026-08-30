@@ -2389,8 +2389,17 @@ function giveUp() {
       ring();
       Save(true);
       showGiveUpReminder();
+      closeModal("modal");
     }
-    closeModal("modal");
+    else
+    {
+      // a little shake animation to indicate the input is incorrect
+      // define shake animation in CSS 
+      confirmationInput.style.animation = "shake 0.3s";
+      setTimeout(() => {
+        confirmationInput.style.animation = "";
+      }, 300);
+    }
   }
   openModal("modal");
 }

@@ -422,6 +422,12 @@ h3 {
     opacity: 0.9;
 }
 
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20%, 80% { transform: translateX(-5px); }
+    40%, 60% { transform: translateX(5px); }
+}
+
 .form-group {
     display: flex;
     flex-direction: column;
