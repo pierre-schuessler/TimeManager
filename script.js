@@ -1596,7 +1596,7 @@ function updateCurrentTimeLine() {
   if (!line) {
     line = document.createElement("div");
     line.id = "current-time-line";
-    line.title = "Current time line — live marker for the current clock time.";
+    line.title = "Current time";
     line.setAttribute("aria-label", "Current time line");
     line.style.position = "absolute";
     line.style.height = "2px";
