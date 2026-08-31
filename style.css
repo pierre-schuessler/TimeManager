@@ -525,6 +525,7 @@ textarea {
 }
 
 .progress-bar {
+    position: relative;
     width: 100%;
     height: var(--spacing-xl);
     background-color: var(--border-lighter);
@@ -533,9 +534,28 @@ textarea {
 }
 
 .progress-bar-fill {
-    transition: width 1s linear;
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    transition: width 1s linear, left 1s linear, transform 1s linear, background-color 0.2s ease;
     height: 100%;
     background-color: var(--primary);
+}
+
+.progress-bar-fill.center-origin-fill {
+    left: 50%;
+    right: auto;
+}
+
+.progress-bar-fill.center-origin-fill.positive {
+    left: 50%;
+    right: auto;
+}
+
+.progress-bar-fill.center-origin-fill.negative {
+    left: auto;
+    right: 50%;
 }
 
 .edit-icon {

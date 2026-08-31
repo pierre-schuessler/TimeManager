@@ -1341,10 +1341,12 @@ function getTimeScaleStreak(scaleId) {
 }
 
 let isEditingAgenda = false;
+let isTimeScaleDetailsVisible = false;
 
 function RenderTimeScales(agendaData = state.agenda) {
   if (checkTimeScaleDone()) return;
   const container = document.getElementById("root-time-scales");
+  const detailsDisplay = isTimeScaleDetailsVisible ? "block" : "none";
   container.innerHTML = `
     <h3>Time Scales</h3>
     <div id="time-scale-list-container">
@@ -1376,9 +1378,9 @@ function RenderTimeScales(agendaData = state.agenda) {
                 <div class="time-scale-progress-meta"><span>Tasks</span><span></span><span></span></div>
                 <div class="progress-bar"><div class="progress-bar-fill" style="width: 0%;"></div></div>
               </div>
-              <div class="time-scale-progress-block detail" style="display: none;">
+              <div class="time-scale-progress-block detail" style="display: ${detailsDisplay};">
                 <div class="time-scale-progress-meta"><span>Work to catch up</span><span></span><span></span></div>
-                <div class="progress-bar"><div class="progress-bar-fill" style="width: 0%;"></div></div>
+                <div class="progress-bar"><div class="progress-bar-fill center-origin-fill positive" style="width: 0%;"></div></div>
               </div>
               <div class="time-scale-progress-block">
                 <div class="time-scale-progress-meta"><span>Free time used</span><span></span><span></span></div>
@@ -1398,13 +1400,14 @@ function RenderTimeScales(agendaData = state.agenda) {
 }
 
 function toggleDetails(){
+  isTimeScaleDetailsVisible = !isTimeScaleDetailsVisible;
   document.querySelectorAll(".detail").forEach(list => {
-    list.style.display = list.style.display === "none" ? "block" : "none";
+    list.style.display = isTimeScaleDetailsVisible ? "block" : "none";
   });
   
   const button = document.getElementById("toggle-details-button");
   if (button) {
-    button.textContent = document.querySelector(".detail").style.display === "none" ? "Show Details" : "Hide Details";
+    button.textContent = isTimeScaleDetailsVisible ? "Hide Details" : "Show Details";
   }
 }
 
@@ -1539,25 +1542,37 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
         case "Tasks":
           meta_info.children[1].textContent = `${taskPercentage.toFixed(1)}%`;
           meta_info.children[2].textContent = `${new Date(totals.elapsed * 1000).toISOString().substring(11, 19)} / ${new Date(totals.goal * 1000).toISOString().substring(11, 19)} (${new Date(Math.max(0, totals.goal - totals.elapsed) * 1000).toISOString().substring(11, 19)} left)`;
+          progressBarFill.style.left = "0%";
           progressBarFill.style.width = `${Math.min(100, taskPercentage)}%`;
+          progressBarFill.style.backgroundColor = "";
           break;
-        case "Work to catch up":
-          meta_info.children[1].textContent = `${((additionalElapsedNeededMs * 0.1) / totals.goal).toFixed(1)}%`;
-          meta_info.children[2].textContent = `${formatDuration(additionalElapsedNeededMs)} left`;
-          progressBarFill.style.width = `${Math.min(100, ((additionalElapsedNeededMs*0.1) / totals.goal))}%`;
-          progressBarFill.style.backgroundColor = additionalElapsedNeededMs > 0 ? "orange" : "";
+        case "Work to catch up": {
+          const catchUpPercent = totals.goal > 0 ? Math.min(100, Math.abs(additionalElapsedNeededMs) / (totals.goal * 1000) * 100) : 0;
+          const directionIsPositive = additionalElapsedNeededMs >= 0;
+          const fillWidth = Math.max(0, catchUpPercent);
+
+          progressBarFill.classList.remove("positive", "negative");
+          progressBarFill.classList.add(directionIsPositive ? "positive" : "negative");
+          progressBarFill.style.width = `${fillWidth}%`;
+          progressBarFill.style.backgroundColor = additionalElapsedNeededMs > 0 ? "orange" : additionalElapsedNeededMs < 0 ? "#2ecc71" : "";
+          meta_info.children[1].textContent = `${Math.abs(additionalElapsedNeededMs) > 0 ? formatDuration(Math.abs(additionalElapsedNeededMs)) : "0s"}`;
+          meta_info.children[2].textContent = `${additionalElapsedNeededMs > 0 ? "Need to work" : additionalElapsedNeededMs < 0 ? "Ahead of pace" : "On track"}`;
           break;
+        }
         case "Free time used":
           meta_info.children[1].textContent = `${freeTimeUsedPercentage.toFixed(1)}%`;
           const wiggleRoomStr = currentFreeTimeMs < 0 ? `-${formatDuration(Math.abs(currentFreeTimeMs))}` : formatDuration(currentFreeTimeMs);
           meta_info.children[2].textContent = `${formatDuration(freeTimeUsedMs)} / ${formatDuration(initialFreeTimeMs)} (${wiggleRoomStr} left)`;
+          progressBarFill.style.left = "0%";
           progressBarFill.style.width = `${Math.min(100, freeTimeUsedPercentage)}%`;
           progressBarFill.style.backgroundColor = currentFreeTimeMs < 0 ? "darkred" : "";
           break;
         case "Time":
           meta_info.children[1].textContent = `${timePercentage.toFixed(1)}%`;
           meta_info.children[2].textContent = `${formatDuration(timeUsed)} / ${formatDuration(totalTimeMs)} (${formatDuration(Math.max(0, totalTimeMs - timeUsed))} left)`;
+          progressBarFill.style.left = "0%";
           progressBarFill.style.width = `${Math.min(100, timePercentage)}%`;
+          progressBarFill.style.backgroundColor = "";
           break;
       }
     });
