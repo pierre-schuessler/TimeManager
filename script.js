@@ -1799,11 +1799,120 @@ function RenderAgenda() {
       })()}
     </table>
   `;
-  buildAgendaSelector()
+  buildAgendaSelector();
+  attachAgendaSlotTooltipHandlers();
   updateCurrentTimeLine();
   if (!window.timeLineInterval) {
-    window.timeLineInterval = setInterval(updateCurrentTimeLine, 60000);
+    window.timeLineInterval = setInterval(updateCurrentTimeLine, 1000);
   }
+}
+
+function attachAgendaSlotTooltipHandlers() {
+  const tooltip = document.getElementById("global-heatmap-tooltip") || (() => {
+    const newTooltip = document.createElement("div");
+    newTooltip.id = "global-heatmap-tooltip";
+    newTooltip.style.position = "fixed";
+    newTooltip.style.pointerEvents = "none";
+    newTooltip.style.zIndex = "99999";
+    newTooltip.style.background = "#fff";
+    newTooltip.style.border = "1px solid #ccc";
+    newTooltip.style.boxShadow = "0 4px 15px rgba(0,0,0,0.2)";
+    newTooltip.style.width = "280px";
+    newTooltip.style.padding = "15px";
+    newTooltip.style.borderRadius = "8px";
+    newTooltip.style.color = "#333";
+    newTooltip.style.textAlign = "left";
+    newTooltip.style.opacity = "0";
+    newTooltip.style.transition = "opacity 0.15s ease";
+    document.body.appendChild(newTooltip);
+    return newTooltip;
+  })();
+
+  const updateTooltipPosition = (event) => {
+    const tooltipWidth = tooltip.offsetWidth || 310;
+    const tooltipHeight = tooltip.offsetHeight || 150;
+    let x = event.clientX - (tooltipWidth / 2);
+    let y = event.clientY - tooltipHeight - 15;
+
+    if (x < 10) x = 10;
+    if (x + tooltipWidth > window.innerWidth - 10) x = window.innerWidth - tooltipWidth - 10;
+    if (y < 10) y = event.clientY + 20;
+
+    tooltip.style.left = x + "px";
+    tooltip.style.top = y + "px";
+  };
+
+  document.querySelectorAll(".agenda-cell").forEach((cell) => {
+    cell.onmouseenter = (event) => {
+      if (isEditingAgenda) {
+        tooltip.style.opacity = "0";
+        return;
+      }
+
+      const slotIso = cell.dataset.iso;
+      const agendaItem = state.agenda[slotIso] || { tasksWorked: {} };
+      const workedEntries = Object.entries(agendaItem.tasksWorked || {}).sort((a, b) => (Number(b[1]) || 0) - (Number(a[1]) || 0));
+      const totalWorkedSeconds = workedEntries.reduce((sum, [, seconds]) => sum + (Number(seconds) || 0), 0);
+
+      if (totalWorkedSeconds <= 0) {
+        tooltip.style.opacity = "0";
+        return;
+      }
+
+      const slotDate = new Date(slotIso);
+      const slotLabel = slotDate.toLocaleString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+      const slotDurationSeconds = 15 * 60;
+      const taskRows = workedEntries.map(([taskId, seconds]) => {
+        const task = state.tasks[taskId];
+        const taskName = task ? task.name : "Unknown job";
+        const taskSeconds = Number(seconds) || 0;
+        const taskPercentage = Math.min(100, (taskSeconds / slotDurationSeconds) * 100);
+        const taskHue = (Math.min(100, Math.max(0, taskPercentage)) / 100) * 120;
+        return `
+          <div class="tt-task-row" style="margin-bottom: 2px;">
+            <span style="font-weight: 500; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${taskName}</span>
+            <span style="color: #666;">${formatDuration(taskSeconds * 1000)} · ${taskPercentage.toFixed(1)}%</span>
+          </div>
+          <div class="tt-progress-bar" style="margin: 0 0 10px 0;">
+            <div class="tt-progress-fill" style="width: ${taskPercentage}%; background-color: hsl(${taskHue}, 100%, 45%);"></div>
+          </div>
+        `;
+      }).join("");
+
+      const totalPercentage = Math.min(100, (totalWorkedSeconds / slotDurationSeconds) * 100);
+      const totalHue = Math.min(120, (totalPercentage / 100) * 120);
+
+      tooltip.innerHTML = `
+        <div style="font-weight: bold; font-size: 1.05em; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 6px;">
+          ${slotLabel}
+        </div>
+        <div class="tt-task-row" style="font-weight: bold; margin-bottom: 8px;">
+          <span>Work done</span>
+          <span>${formatDuration(totalWorkedSeconds * 1000)} · ${totalPercentage.toFixed(1)}%</span>
+        </div>
+        <div class="tt-progress-bar" style="margin-bottom: 12px; height: 10px;">
+          <div class="tt-progress-fill" style="width: ${totalPercentage}%; background-color: hsl(${totalHue}, 100%, 45%);"></div>
+        </div>
+        ${taskRows}
+      `;
+
+      tooltip.style.opacity = "1";
+      updateTooltipPosition(event);
+    };
+
+    cell.onmousemove = (event) => {
+      if (isEditingAgenda) {
+        tooltip.style.opacity = "0";
+        return;
+      }
+      updateTooltipPosition(event);
+    };
+
+    cell.onmouseleave = () => {
+      tooltip.style.opacity = "0";
+    };
+  });
 }
 
 const getDataFromCell = (cell) => {

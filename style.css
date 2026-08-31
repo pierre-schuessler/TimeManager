@@ -274,6 +274,55 @@ h3 {
     min-width: 40px;
     height: 0.5rem;
     border: var(--border-standard);
+    transition: height 0.15s ease-out, z-index 0s 0.15s;
+}
+
+#agenda-table .agenda-cell:hover {
+    height: 1rem;
+    z-index: 2;
+    transition: height 0.5s ease-in-out 1s, z-index 0s 1s;
+}
+
+#global-heatmap-tooltip {
+    position: fixed;
+    pointer-events: none;
+    z-index: 99999;
+    background: #fff;
+    border: 1px solid #ccc;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    width: 280px;
+    padding: 15px;
+    border-radius: 8px;
+    color: #333;
+    text-align: left;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.tt-task-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.85em;
+    margin-bottom: 4px;
+    align-items: center;
+}
+
+.tt-progress-bar {
+    display: block;
+    width: 100%;
+    background-color: #eee;
+    border-radius: 4px;
+    height: 8px;
+    overflow: hidden;
+    margin: 4px 0 10px 0;
+    position: relative;
+}
+
+.tt-progress-fill {
+    display: block;
+    height: 100%;
+    transition: width 0.3s;
 }
 
 .modal-overlay {
