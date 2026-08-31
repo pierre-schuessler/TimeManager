@@ -2393,8 +2393,6 @@ function giveUp() {
     }
     else
     {
-      // a little shake animation to indicate the input is incorrect
-      // define shake animation in CSS 
       confirmationInput.style.animation = "shake 0.3s";
       setTimeout(() => {
         confirmationInput.style.animation = "";
