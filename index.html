@@ -9,6 +9,7 @@
     <header>
       <h3>Time Manager</h3>
       <div>
+        <button class="btn" id="toggle-details-button" onclick="toggleDetails()" title="Toggle the visibility of the details section.">Show Details</button>
         <button class="btn" id="btn-give-up" onclick="giveUp()">Give up</button>
         <button class="btn" id="btn-migrate" onclick="document.getElementById('modal-title').textContent = 'Migrate data?';document.getElementById('modal-body').textContent = 'Are you sure you want to migrate your local data to your Firebase account? This will override any existing data.';document.getElementById('btn-submit').textContent = 'Migrate';document.getElementById('btn-submit').onclick = function() { migrateToFirebase(); closeModal('modal'); };openModal('modal');" title="Transfer all of your local data to your account.">Migrate</button>
         <button class="btn" id="btn-reset" onclick="document.getElementById('modal-title').textContent = 'Reset all work time?';document.getElementById('modal-body').textContent = 'Are you sure you want to reset all work time to 0 and start all time scales today? This action cannot be undone.';document.getElementById('btn-submit').textContent = 'Reset';document.getElementById('btn-submit').onclick = function() { resetTimes(); closeModal('modal'); };openModal('modal');" title="Reset all work time to 0 and start all time scales today.">Reset</button>

@@ -1365,13 +1365,19 @@ function RenderTimeScales(agendaData = state.agenda) {
               <div onclick="openTimeScaleStatistics('${scale.id}')" class="stats-icon" style="cursor: pointer;">📊</div>
               <div onclick="editTimeScale('${scale.id}')" class="edit-icon" style="cursor: pointer;">⚙</div>
             </div>
+            <div style="display:flex; gap: 10px; margin-top: 5px; flex-wrap: wrap; justify-content: space-between; align-items: center;">
             <div>Duration: ${scale.duration} day${scale.duration !== 1 ? "s" : ""}</div>
             <div>
               ${scale.duration != 1 ? `<div>Start: ${new Date(scale.start).toLocaleDateString('en-GB')}</div><div>End: ${new Date(new Date(scale.start).getTime() + (scale.duration-1) * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB')}</div>` : `<div>Date: ${new Date(scale.start).toLocaleDateString('en-GB')}</div>`}
             </div>
+            </div>
             <div class="time-scale-progress-section">
               <div class="time-scale-progress-block">
                 <div class="time-scale-progress-meta"><span>Tasks</span><span></span><span></span></div>
+                <div class="progress-bar"><div class="progress-bar-fill" style="width: 0%;"></div></div>
+              </div>
+              <div class="time-scale-progress-block detail" style="display: none;">
+                <div class="time-scale-progress-meta"><span>Work to catch up</span><span></span><span></span></div>
                 <div class="progress-bar"><div class="progress-bar-fill" style="width: 0%;"></div></div>
               </div>
               <div class="time-scale-progress-block">
@@ -1389,6 +1395,17 @@ function RenderTimeScales(agendaData = state.agenda) {
     </div>
   `
   requestAnimationFrame(() => { requestAnimationFrame(() => { UpdateTimeScalesRender(agendaData); }); });
+}
+
+function toggleDetails(){
+  document.querySelectorAll(".detail").forEach(list => {
+    list.style.display = list.style.display === "none" ? "block" : "none";
+  });
+  
+  const button = document.getElementById("toggle-details-button");
+  if (button) {
+    button.textContent = document.querySelector(".detail").style.display === "none" ? "Show Details" : "Hide Details";
+  }
 }
 
 let hasRungToday = false;
@@ -1506,6 +1523,12 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
     const freeTimeUsedPercentage = initialFreeTimeMs > 0 ? Math.min(100, Math.max(0, (freeTimeUsedMs / initialFreeTimeMs) * 100)) : (freeTimeUsedMs > 0 ? 100 : 0);
     const timePercentage = (totalTimeMs > 0 && !isNaN(timeUsed)) ? Math.min(100, Math.max(0, (timeUsed / totalTimeMs) * 100)) : 0;
 
+    // compute how much time you need to work right now so the task completion percentage is at least equal to the free time used percentage
+    const requiredElapsedForFreeTimePercentage = (freeTimeUsedPercentage / 100) * totals.goal;
+    const additionalElapsedNeeded = requiredElapsedForFreeTimePercentage - totals.elapsed;
+    const additionalElapsedNeededMs = additionalElapsedNeeded * 1000;
+
+
     let blocks = timeScaleContainer.querySelectorAll(".time-scale-progress-block");
     blocks.forEach((block) => {
       let meta_info = block.querySelector(".time-scale-progress-meta");
@@ -1517,6 +1540,12 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
           meta_info.children[1].textContent = `${taskPercentage.toFixed(1)}%`;
           meta_info.children[2].textContent = `${new Date(totals.elapsed * 1000).toISOString().substring(11, 19)} / ${new Date(totals.goal * 1000).toISOString().substring(11, 19)} (${new Date(Math.max(0, totals.goal - totals.elapsed) * 1000).toISOString().substring(11, 19)} left)`;
           progressBarFill.style.width = `${Math.min(100, taskPercentage)}%`;
+          break;
+        case "Work to catch up":
+          meta_info.children[1].textContent = `${((additionalElapsedNeededMs * 0.1) / totals.goal).toFixed(1)}%`;
+          meta_info.children[2].textContent = `${formatDuration(additionalElapsedNeededMs)} left`;
+          progressBarFill.style.width = `${Math.min(100, ((additionalElapsedNeededMs*0.1) / totals.goal))}%`;
+          progressBarFill.style.backgroundColor = additionalElapsedNeededMs > 0 ? "orange" : "";
           break;
         case "Free time used":
           meta_info.children[1].textContent = `${freeTimeUsedPercentage.toFixed(1)}%`;
@@ -2406,6 +2435,8 @@ function openTimeScaleStatistics(scaleId) {
   openModal("modal");
 }
 
+  
+
 function openHelp(){
   document.getElementById("modal-title").innerText = "How to use the tracker";
   document.getElementById("modal-body").innerHTML = `
@@ -2548,3 +2579,4 @@ window.deleteTimeScale = deleteTimeScale;
 window.openModal = openModal;
 window.openTimeScaleStatistics = openTimeScaleStatistics; 
 window.giveUp = giveUp;
+window.toggleDetails = toggleDetails;
