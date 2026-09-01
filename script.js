@@ -1379,7 +1379,7 @@ function RenderTimeScales(agendaData = state.agenda) {
                 <div class="progress-bar"><div class="progress-bar-fill" style="width: 0%;"></div></div>
               </div>
               <div class="time-scale-progress-block detail" style="display: ${detailsDisplay};">
-                <div class="time-scale-progress-meta"><span>Work to catch up</span><span></span><span></span></div>
+                <div class="time-scale-progress-meta"><span>Pace</span><span></span><span></span></div>
                 <div class="progress-bar"><div class="progress-bar-fill center-origin-fill positive" style="width: 0%;"></div></div>
               </div>
               <div class="time-scale-progress-block">
@@ -1546,9 +1546,9 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
           progressBarFill.style.width = `${Math.min(100, taskPercentage)}%`;
           progressBarFill.style.backgroundColor = "";
           break;
-        case "Work to catch up": {
+        case "Pace": {
           const catchUpPercent = totals.goal > 0 ? Math.min(100, Math.abs(additionalElapsedNeededMs) / (totals.goal * 1000) * 100) : 0;
-          const directionIsPositive = additionalElapsedNeededMs >= 0;
+          const directionIsPositive = additionalElapsedNeededMs <= 0;
           const fillWidth = Math.max(0, catchUpPercent);
 
           progressBarFill.classList.remove("positive", "negative");
