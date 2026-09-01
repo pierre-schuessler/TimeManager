@@ -1556,7 +1556,7 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
           progressBarFill.style.width = `${fillWidth}%`;
           progressBarFill.style.backgroundColor = additionalElapsedNeededMs > 0 ? "orange" : additionalElapsedNeededMs < 0 ? "#2ecc71" : "";
           meta_info.children[1].textContent = `${Math.abs(additionalElapsedNeededMs) > 0 ? formatDuration(Math.abs(additionalElapsedNeededMs)) : "0s"}`;
-          meta_info.children[2].textContent = `${additionalElapsedNeededMs > 0 ? "Need to work" : additionalElapsedNeededMs < 0 ? "Ahead of pace" : "On track"}`;
+          meta_info.children[2].textContent = `${additionalElapsedNeededMs >= 5* 60 * 1000 ? "Need to work" : additionalElapsedNeededMs <= -5 * 60 * 1000 ? "Ahead of pace" : "On track"}`;
           break;
         }
         case "Free time used":
