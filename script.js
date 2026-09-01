@@ -1619,12 +1619,20 @@ function resetTimes(){
 const getCellBgStyles = (busy, totalSecondsWorked) => {
   const hasWork = totalSecondsWorked > 0;
   const percent = hasWork ? Math.min(1, totalSecondsWorked / 900) : 0;
-  const greenColor = `rgba(76, 255, 80, ${(percent * 0.8) + 0.2})`;
+  const greenColor = `rgb(76, 255, 80)`;
   let styles = {};
 
-  if (busy && hasWork) { styles = { background: `linear-gradient(135deg, lightcoral 30%, ${greenColor} 70%)`, backgroundColor: '' }; } 
+  if (busy && hasWork) { 
+    const workPercentage = percent * 100;
+    const sidePercentage = (100 - workPercentage) / 2;
+    const bgStyle = `
+      repeating-linear-gradient(45deg, rgba(240, 128, 128, 0.8) 0px, rgba(240, 128, 128, 0.8) 8px, transparent 8px, transparent 16px),
+      linear-gradient(90deg, lightcoral 0%, lightcoral ${sidePercentage}%, ${greenColor} ${sidePercentage}%, ${greenColor} ${sidePercentage + workPercentage}%, lightcoral ${sidePercentage + workPercentage}%, lightcoral 100%)
+    `;
+    styles = { background: bgStyle, backgroundColor: '' }; 
+  }
   else if (busy) { styles = { background: '', backgroundColor: 'lightcoral' }; } 
-  else if (hasWork) { styles = { background: '', backgroundColor: greenColor }; } 
+  else if (hasWork) { styles = { background: `linear-gradient(90deg, transparent 0%, transparent calc(50% - ${percent * 50}%), ${greenColor} calc(50% - ${percent * 50}%), ${greenColor} calc(50% + ${percent * 50}%), transparent calc(50% + ${percent * 50}%), transparent 100%)`, backgroundColor: '' }; } 
   else { styles = { background: '', backgroundColor: 'transparent' }; }
   
   
