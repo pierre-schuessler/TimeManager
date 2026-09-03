@@ -858,7 +858,6 @@ function snapSession(taskId) {
   }
 
   let firstScaleId = Object.keys(state.timeScales)[0];
-  let currentElapsed = task.times[firstScaleId].elapsed;
   
   let anyCrossed = false;
   let isAllCompleted = true;
@@ -898,10 +897,6 @@ function snapSession(taskId) {
     }
   });
 
-  let targetElapsed = task.times[firstScaleId].elapsed;
-  let gap = targetElapsed - currentElapsed;
-  syncAgendaGap(taskId, gap);
-  
   let scaleFinished = false;
   Object.values(state.timeScales).forEach(scale => {
     const totals = Object.values(state.tasks).reduce((acc, t) => {
