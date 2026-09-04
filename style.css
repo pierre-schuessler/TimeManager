@@ -818,7 +818,7 @@ table > * {
     align-items: center;
     z-index: 9999;
     opacity: 1;
-    transition: opacity 2s ease;
+    transition: opacity 1s ease-out;
 }
 
 #loading-overlay.hidden {
