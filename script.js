@@ -1,7 +1,65 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-analytics.js"; 
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
-import { getDatabase, ref, set, get, child, onValue, update, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
+import { getDatabase, ref, set, get, child, onValue, update as firebaseUpdate, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
+
+let firebaseUpdateWarningVisible = false;
+
+function showFirebaseUpdateWarning(type) {
+  if (firebaseUpdateWarningVisible) return;
+  firebaseUpdateWarningVisible = true;
+  if (type === "update-timeout") {
+    document.getElementById("modal-title").innerText = "Update failed";
+    document.getElementById("modal-body").innerHTML = `<p>It seems that we couldn't reach the database.</p><p>Please check your internet connection.</p><p>This window should automatically close when your connection is restored. If it doesn't, you can reload the page to try again.</p>`;
+  }
+  else if (type === "out-of-sync") {
+    document.getElementById("modal-title").innerText = "You are out of sync with the database";
+    document.getElementById("modal-body").innerHTML = `<p>It seems you have been disconnected from the database for a while. To prevent data loss, you will need to reload the page and try again.</p><p>Please be aware that your last change was not saved.</p>`;
+  }
+  document.getElementById("btn-submit").innerText = "Reload";
+  document.getElementById("modal-cancel").style.display = "none";
+  document.querySelector(".close-btn").style.display = "none";
+  document.getElementById("btn-submit").onclick = function() { location.reload() };
+  openModal("modal");
+}
+
+function clearFirebaseUpdateWarning() {
+  if (!firebaseUpdateWarningVisible) return;
+
+
+  firebaseUpdateWarningVisible = false;
+  closeModal("modal");
+
+  showLoading();
+  setTimeout(() => {
+    hideLoading();
+  }, 500);
+}
+
+const update = (reference, data, timeoutMs = 1500) => {
+  const sendUpdate = firebaseUpdate(reference, data);
+  let timedOut = false;
+  let timeoutId;
+
+  sendUpdate.then(() => {
+    if (timedOut) clearFirebaseUpdateWarning();
+  }, () => {}).finally(() => clearTimeout(timeoutId));
+
+  const timeout = new Promise((_, reject) =>
+    timeoutId = setTimeout(() => {
+      timedOut = true;
+      reject(new Error("Update timed out"));
+    }, timeoutMs)
+  );
+
+  return Promise.race([sendUpdate, timeout])
+    .catch((error) => {
+      if (error.message === "Update timed out") {
+        showFirebaseUpdateWarning("update-timeout");
+      }
+      throw error;
+    });
+};
 
 const firebaseConfig = {
   apiKey: "AIzaSyCJNvK9FJ06goVNdwXkzFViiqSdoeQSZ3Y",
@@ -459,13 +517,7 @@ async function Save(firebase = false) {
   if (user && firebase) {
     if (!hasSyncedWithFirebase)
     {
-        document.getElementById("modal-title").innerText = "You are out of sync with the database";
-        document.getElementById("modal-body").innerHTML = `<p>It seems you have been disconnected from the database for a while. To prevent data loss, you will need to reload the page and try again.</p><p>Please be aware that your last change was not saved.</p>`;
-        document.getElementById("btn-submit").innerText = "Reload";
-        document.getElementById("modal-cancel").style.display = "none";
-        document.querySelector(".close-btn").style.display = "none";
-        document.getElementById("btn-submit").onclick = function() { location.reload() };
-        openModal("modal");
+        showFirebaseUpdateWarning("out-of-sync");
         return;
     };
     isSavingLocally = true; 
@@ -2575,6 +2627,8 @@ const closeModal = (id) => {
   }
 
   if (cancelButton) cancelButton.style.display = "";
+  const closeButton = document.querySelector(".close-btn");
+  if (closeButton) closeButton.style.display = "";
   document.getElementById(id).classList.remove('active');
 };
 
