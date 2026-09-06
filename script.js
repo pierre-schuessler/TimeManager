@@ -1751,43 +1751,137 @@ function updateCurrentTimeLine() {
 
   const freeTimeLimitColor = "#ff9800";
 
-  Object.values(state.timeScales).forEach(scale => {
-    const scaleEndMs = new Date(scale.start).getTime() + (scale.duration * 24 * 60 * 60 * 1000);
-    let requiredWorkMs = 0;
-    
-    Object.values(state.tasks).forEach(task => {
-      const goal = Number(task.times[scale.id]?.goal) || 0;
-      const elapsed = Number(task.times[scale.id]?.elapsed) || 0;
-      requiredWorkMs += Math.max(0, (goal - elapsed) * 1000);
+  const agendaStartMs = new Date(table.querySelector("[data-iso]")?.dataset.iso).getTime();
+  const agendaDays = table.querySelectorAll(".agenda-date-header").length;
+  const agendaEndMs = agendaStartMs + agendaDays * 24 * 60 * 60 * 1000;
+  const nowMs = Date.now();
+
+  const renderFreeTimeLimit = (scale, zeroTimeMs, cycleEndMs) => {
+    if (!zeroTimeMs || zeroTimeMs < agendaStartMs || zeroTimeMs >= agendaEndMs) return;
+
+    const zeroDate = new Date(zeroTimeMs);
+    const zHour = zeroDate.getHours();
+    const zMinute = zeroDate.getMinutes();
+    const zSlotIndex = (zHour * 4) + Math.floor(zMinute / 15);
+    const zRow = table.rows[zSlotIndex + 1];
+    if (!zRow) return;
+
+    const zRemainderMinutes = zMinute % 15;
+    const zPercentDown = zRemainderMinutes / 15;
+    const zExactY = table.offsetTop + zRow.offsetTop + (zRow.offsetHeight * zPercentDown);
+    const zeroDateStr = zeroDate.toDateString();
+    const zTargetCell = Array.from(zRow.cells).slice(1).find(cell => {
+      const cellIso = cell.dataset.iso;
+      return cellIso && new Date(cellIso).toDateString() === zeroDateStr;
     });
-    
-    let zeroTimeMs = null;
-    
-    if (requiredWorkMs > 0) {
-      let timeRemaining = requiredWorkMs;
-      let timeMarker = scaleEndMs;
-      let earliestStart = new Date(scale.start).getTime();
+    if (!zTargetCell) return;
 
-      while (timeRemaining > 0 && timeMarker > earliestStart) {
-        let markerDate = new Date(timeMarker);
-        let minutes = Math.floor(markerDate.getMinutes() / 15) * 15;
-        let slotStart = new Date(markerDate.getFullYear(), markerDate.getMonth(), markerDate.getDate(), markerDate.getHours(), minutes, 0, 0);
-        let slotStartTime = slotStart.getTime();
+    const lineKey = String(Math.round(zeroTimeMs / 1000));
+    const existingLine = container.querySelector(`[data-free-time-key="${lineKey}"]`);
+    if (existingLine) {
+      const scaleNames = existingLine.dataset.scaleNames.split("|");
+      if (!scaleNames.includes(scale.name)) scaleNames.push(scale.name);
+      existingLine.dataset.scaleNames = scaleNames.join("|");
+      const scaleLabel = scaleNames.join(" and ");
+      const cycleEndLabel = new Date(cycleEndMs).toLocaleDateString('en-GB');
+      existingLine.title = `Free-time limit for ${scaleLabel} — start working here to reach the goals by ${cycleEndLabel}.`;
+      existingLine.setAttribute("aria-label", `Free-time limit for ${scaleLabel}`);
+      return;
+    }
 
-        let timeInThisSlot;
-        if (timeMarker === slotStartTime) { 
-          timeMarker -= 1; 
-          continue; 
-        } else { 
-          timeInThisSlot = timeMarker - slotStartTime; 
+    const zeroLine = document.createElement("div");
+    zeroLine.className = "zero-free-time-line";
+    zeroLine.dataset.freeTimeKey = lineKey;
+    zeroLine.dataset.scaleNames = scale.name;
+    zeroLine.title = `Free-time limit for ${scale.name} — start working here to reach the goals by ${new Date(cycleEndMs).toLocaleDateString('en-GB')}.`;
+    zeroLine.setAttribute("aria-label", `Free-time limit for ${scale.name}`);
+    zeroLine.style.position = "absolute";
+    zeroLine.style.height = "2px";
+    zeroLine.style.backgroundColor = freeTimeLimitColor;
+    zeroLine.style.pointerEvents = "auto";
+    zeroLine.style.zIndex = "49";
+    zeroLine.style.cursor = "help";
+    zeroLine.innerHTML = `<div style="width: 8px; height: 8px; background: ${freeTimeLimitColor}; border-radius: 50%; position: absolute; top: -3px; left: -4px;"></div>`;
+    zeroLine.style.top = zExactY + "px";
+    zeroLine.style.left = (table.offsetLeft + zTargetCell.offsetLeft) + "px";
+    zeroLine.style.width = zTargetCell.offsetWidth + "px";
+    container.appendChild(zeroLine);
+  };
+
+  Object.values(state.timeScales).forEach(scale => {
+    const scaleStartMs = new Date(scale.start).getTime();
+    const cycleDurationMs = (Number(scale.duration) || 0) * 24 * 60 * 60 * 1000;
+    if (!Number.isFinite(scaleStartMs) || cycleDurationMs <= 0) return;
+
+    const firstCycleIndex = Math.max(0, Math.floor((agendaStartMs - scaleStartMs) / cycleDurationMs));
+    const firstCycleStartMs = scaleStartMs + firstCycleIndex * cycleDurationMs;
+
+    for (let cycleStartMs = firstCycleStartMs; cycleStartMs < agendaEndMs; cycleStartMs += cycleDurationMs) {
+      const cycleEndMs = cycleStartMs + cycleDurationMs;
+      if (cycleEndMs <= agendaStartMs) continue;
+
+      const cycleStats = Object.values(state.statistics).find(stat =>
+        isRealProgressStat(stat) && stat.scaleId === scale.id && Math.abs(new Date(stat.start).getTime() - cycleStartMs) < 1000
+      );
+      const isCurrentCycle = nowMs >= cycleStartMs && nowMs < cycleEndMs;
+      let requiredWorkMs = 0;
+
+      Object.values(state.tasks).forEach(task => {
+        let requiredForTaskMs = 0;
+        const cycleGoal = Number(task.times[scale.id]?.goal) || 0;
+        let cycleElapsed = 0;
+        if (isCurrentCycle) {
+          cycleElapsed = Number(task.times[scale.id]?.elapsed) || 0;
+        } else if (cycleStats) {
+          const statTask = (cycleStats.tasks || []).find(item => item.id === task.id);
+          cycleElapsed = Number(statTask?.elapsed) || 0;
         }
 
-        let currentSlotIso = getSafeIsoString(slotStart);
-        let isBusy = state.agenda[currentSlotIso] && state.agenda[currentSlotIso].busy;
+        requiredForTaskMs = Math.max(0, (cycleGoal - cycleElapsed) * 1000);
 
+        Object.values(state.timeScales).forEach(otherScale => {
+          if (otherScale.id === scale.id) return;
+
+          const otherScaleStartMs = new Date(otherScale.start).getTime();
+          const otherCycleDurationMs = (Number(otherScale.duration) || 0) * 24 * 60 * 60 * 1000;
+          if (!Number.isFinite(otherScaleStartMs) || otherCycleDurationMs <= 0) return;
+
+          const otherCycleIndex = Math.max(0, Math.floor((cycleEndMs - otherScaleStartMs - 1) / otherCycleDurationMs));
+          const otherCycleEndMs = otherScaleStartMs + (otherCycleIndex + 1) * otherCycleDurationMs;
+          const otherGoal = Number(task.times[otherScale.id]?.goal) || 0;
+          const otherElapsed = Number(task.times[otherScale.id]?.elapsed) || 0;
+          const otherRemainingMs = Math.max(0, (otherGoal - otherElapsed) * 1000);
+
+          const requiredByOtherScaleMs = otherCycleEndMs <= cycleEndMs
+            ? otherRemainingMs
+            : Math.max(0, otherRemainingMs - getWorkableTimeBetween(cycleEndMs, otherCycleEndMs));
+          requiredForTaskMs = Math.max(requiredForTaskMs, requiredByOtherScaleMs);
+        });
+
+        requiredWorkMs += requiredForTaskMs;
+      });
+
+      if (requiredWorkMs <= 0) continue;
+
+      let timeRemaining = requiredWorkMs;
+      let timeMarker = cycleEndMs;
+      while (timeRemaining > 0 && timeMarker > cycleStartMs) {
+        const markerDate = new Date(timeMarker);
+        const minutes = Math.floor(markerDate.getMinutes() / 15) * 15;
+        const slotStart = new Date(markerDate.getFullYear(), markerDate.getMonth(), markerDate.getDate(), markerDate.getHours(), minutes, 0, 0);
+        const slotStartTime = slotStart.getTime();
+
+        if (timeMarker === slotStartTime) {
+          timeMarker -= 1;
+          continue;
+        }
+
+        const timeInThisSlot = Math.min(timeMarker - slotStartTime, timeMarker - cycleStartMs);
+        const currentSlotIso = getSafeIsoString(slotStart);
+        const isBusy = state.agenda[currentSlotIso]?.busy;
         if (!isBusy) {
           if (timeInThisSlot >= timeRemaining) {
-            zeroTimeMs = timeMarker - timeRemaining;
+            renderFreeTimeLimit(scale, timeMarker - timeRemaining, cycleEndMs);
             timeRemaining = 0;
           } else {
             timeRemaining -= timeInThisSlot;
@@ -1795,55 +1889,8 @@ function updateCurrentTimeLine() {
         }
         timeMarker -= timeInThisSlot;
       }
-      
-      if (timeRemaining > 0) {
-        zeroTimeMs = earliestStart; 
-      }
-    }
 
-    if (zeroTimeMs) {
-      const zeroDate = new Date(zeroTimeMs);
-      const zHour = zeroDate.getHours();
-      const zMinute = zeroDate.getMinutes();
-      const zSlotIndex = (zHour * 4) + Math.floor(zMinute / 15);
-      const zRow = table.rows[zSlotIndex + 1];
-
-      if (zRow) {
-        const zRemainderMinutes = zMinute % 15;
-        const zPercentDown = zRemainderMinutes / 15;
-        const zExactY = table.offsetTop + zRow.offsetTop + (zRow.offsetHeight * zPercentDown);
-
-        let zTargetCell = null;
-        const zeroDateStr = zeroDate.toDateString();
-        for (let i = 1; i < zRow.cells.length; i++) {
-          const cellIso = zRow.cells[i].dataset.iso;
-          if (cellIso && new Date(cellIso).toDateString() === zeroDateStr) {
-            zTargetCell = zRow.cells[i];
-            break;
-          }
-        }
-
-        if (zTargetCell) {
-          let zeroLine = document.createElement("div");
-          zeroLine.className = "zero-free-time-line";
-          zeroLine.title = `Free-time limit for ${scale.name} — this is the point where you will have to start working in order to reach your goals before the scale ends.`;
-          zeroLine.setAttribute("aria-label", `Free-time limit for ${scale.name}`);
-          zeroLine.style.position = "absolute";
-          zeroLine.style.height = "2px";
-          zeroLine.style.backgroundColor = freeTimeLimitColor; 
-          zeroLine.style.pointerEvents = "auto";
-          zeroLine.style.zIndex = "49";
-          zeroLine.style.cursor = "help";
-          zeroLine.innerHTML = `<div style="width: 8px; height: 8px; background: ${freeTimeLimitColor}; border-radius: 50%; position: absolute; top: -3px; left: -4px;"></div>`;
-          
-          zeroLine.style.display = "block";
-          zeroLine.style.top = zExactY + "px";
-          zeroLine.style.left = (table.offsetLeft + zTargetCell.offsetLeft) + "px";
-          zeroLine.style.width = zTargetCell.offsetWidth + "px";
-          
-          container.appendChild(zeroLine);
-        }
-      }
+      if (timeRemaining > 0) renderFreeTimeLimit(scale, cycleStartMs, cycleEndMs);
     }
   });
 }
