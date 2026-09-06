@@ -1159,6 +1159,10 @@ function deleteTask(id) {
 
 function createNewSubtask(taskId) {
   let task = state.tasks[taskId];
+  if (auth.currentUser && !hasSyncedWithFirebase) {
+    showFirebaseUpdateWarning("out-of-sync");
+    return;
+  }
   let subtaskName = prompt("What do you need to do?");
   lastTick = performance.now();
   if (subtaskName && subtaskName.trim() !== "") {
