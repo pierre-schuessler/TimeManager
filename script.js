@@ -1824,6 +1824,15 @@ function updateCurrentTimeLine() {
         isRealProgressStat(stat) && stat.scaleId === scale.id && Math.abs(new Date(stat.start).getTime() - cycleStartMs) < 1000
       );
       const isCurrentCycle = nowMs >= cycleStartMs && nowMs < cycleEndMs;
+      const isCycleDone = Object.values(state.tasks).every(task => {
+        const goal = Number(task.times[scale.id]?.goal) || 0;
+        const elapsed = isCurrentCycle
+          ? Number(task.times[scale.id]?.elapsed) || 0
+          : Number((cycleStats?.tasks || []).find(item => item.id === task.id)?.elapsed) || 0;
+        return elapsed >= goal;
+      });
+      if ((isCurrentCycle || cycleStats) && isCycleDone) continue;
+
       let requiredWorkMs = 0;
 
       Object.values(state.tasks).forEach(task => {
