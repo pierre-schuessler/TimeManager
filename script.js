@@ -1747,16 +1747,15 @@ function updateCurrentTimeLine() {
     line.style.display = "none";
   }
 
-  document.querySelectorAll(".zero-free-time-line").forEach(el => el.remove());
-
   const freeTimeLimitColor = "#ff9800";
 
   const agendaStartMs = new Date(table.querySelector("[data-iso]")?.dataset.iso).getTime();
   const agendaDays = table.querySelectorAll(".agenda-date-header").length;
   const agendaEndMs = agendaStartMs + agendaDays * 24 * 60 * 60 * 1000;
   const nowMs = Date.now();
+  const renderedLineKeys = new Set();
 
-  const renderFreeTimeLimit = (scale, zeroTimeMs, cycleEndMs) => {
+  const renderFreeTimeLimit = (scale, zeroTimeMs, cycleEndMs, isImpossible = false, prerequisiteScaleNames = []) => {
     if (!zeroTimeMs || zeroTimeMs < agendaStartMs || zeroTimeMs >= agendaEndMs) return;
 
     const zeroDate = new Date(zeroTimeMs);
@@ -1777,15 +1776,28 @@ function updateCurrentTimeLine() {
     if (!zTargetCell) return;
 
     const lineKey = String(Math.round(zeroTimeMs / 1000));
+    renderedLineKeys.add(lineKey);
     const existingLine = container.querySelector(`[data-free-time-key="${lineKey}"]`);
+    const prerequisiteText = prerequisiteScaleNames.length > 0
+      ? ` Without working on ${prerequisiteScaleNames.join(" and ")} before this cycle starts, the required work will not fit.`
+      : " The required work will not fit into the available time in this cycle. Start before this cycle begins.";
+    const lineTitle = isImpossible
+      ? `This ${scale.name} cycle require work to begin in advance. ${prerequisiteText}`
+      : `Free-time limit for ${scale.name} — start working here to reach the goals by ${new Date(cycleEndMs).toLocaleDateString('en-GB')}.`;
+
     if (existingLine) {
       const scaleNames = existingLine.dataset.scaleNames.split("|");
       if (!scaleNames.includes(scale.name)) scaleNames.push(scale.name);
       existingLine.dataset.scaleNames = scaleNames.join("|");
       const scaleLabel = scaleNames.join(" and ");
       const cycleEndLabel = new Date(cycleEndMs).toLocaleDateString('en-GB');
-      existingLine.title = `Free-time limit for ${scaleLabel} — start working here to reach the goals by ${cycleEndLabel}.`;
-      existingLine.setAttribute("aria-label", `Free-time limit for ${scaleLabel}`);
+      existingLine.classList.toggle("impossible-free-time-line", isImpossible || existingLine.classList.contains("impossible-free-time-line"));
+      existingLine.title = isImpossible
+        ? `This ${scaleLabel} cycle require work to begin in advance. ${prerequisiteText}`
+        : `Free-time limit for ${scaleLabel} — start working here to reach the goals by ${cycleEndLabel}.`;
+      existingLine.setAttribute("aria-label", isImpossible
+        ? `Impossible free-time limit for ${scaleLabel}`
+        : `Free-time limit for ${scaleLabel}`);
       return;
     }
 
@@ -1793,8 +1805,11 @@ function updateCurrentTimeLine() {
     zeroLine.className = "zero-free-time-line";
     zeroLine.dataset.freeTimeKey = lineKey;
     zeroLine.dataset.scaleNames = scale.name;
-    zeroLine.title = `Free-time limit for ${scale.name} — start working here to reach the goals by ${new Date(cycleEndMs).toLocaleDateString('en-GB')}.`;
-    zeroLine.setAttribute("aria-label", `Free-time limit for ${scale.name}`);
+    zeroLine.title = lineTitle;
+    zeroLine.setAttribute("aria-label", isImpossible
+      ? `Impossible free-time limit for ${scale.name}`
+      : `Free-time limit for ${scale.name}`);
+    if (isImpossible) zeroLine.classList.add("impossible-free-time-line");
     zeroLine.style.position = "absolute";
     zeroLine.style.height = "2px";
     zeroLine.style.backgroundColor = freeTimeLimitColor;
@@ -1834,6 +1849,7 @@ function updateCurrentTimeLine() {
       if ((isCurrentCycle || cycleStats) && isCycleDone) continue;
 
       let requiredWorkMs = 0;
+      const prerequisiteScaleNames = new Set();
 
       Object.values(state.tasks).forEach(task => {
         let requiredForTaskMs = 0;
@@ -1864,6 +1880,9 @@ function updateCurrentTimeLine() {
           const requiredByOtherScaleMs = otherCycleEndMs <= cycleEndMs
             ? otherRemainingMs
             : Math.max(0, otherRemainingMs - getWorkableTimeBetween(cycleEndMs, otherCycleEndMs));
+          if (requiredByOtherScaleMs > 0) {
+            prerequisiteScaleNames.add(otherScale.name);
+          }
           requiredForTaskMs = Math.max(requiredForTaskMs, requiredByOtherScaleMs);
         });
 
@@ -1899,8 +1918,14 @@ function updateCurrentTimeLine() {
         timeMarker -= timeInThisSlot;
       }
 
-      if (timeRemaining > 0) renderFreeTimeLimit(scale, cycleStartMs, cycleEndMs);
+      if (timeRemaining > 0) {
+        renderFreeTimeLimit(scale, cycleStartMs, cycleEndMs, true, [...prerequisiteScaleNames]);
+      }
     }
+  });
+
+  container.querySelectorAll(".zero-free-time-line").forEach(line => {
+    if (!renderedLineKeys.has(line.dataset.freeTimeKey)) line.remove();
   });
 }
 

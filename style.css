@@ -93,7 +93,30 @@ footer {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
 }
+@keyframes impossibleFreeTimePulse {
+    from {
+        opacity: 0.85;
+        box-shadow: 0 0 2px rgba(255, 152, 0, 0.45);
+    }
 
+    to {
+        opacity: 1;
+        box-shadow: 0 0 12px 3px rgba(255, 152, 0, 0.95);
+    }
+}
+
+.impossible-free-time-line {
+    background-color: #ff9800 !important;
+    height: 4px !important;
+    animation: impossibleFreeTimePulse 1.4s ease-in-out infinite alternate;
+}
+
+.impossible-free-time-line > div {
+    background-color: #ff9800 !important;
+    width: 10px !important;
+    height: 10px !important;
+    box-shadow: 0 0 7px 2px rgba(255, 152, 0, 0.9);
+}
 
 
 #root-time-scale {
