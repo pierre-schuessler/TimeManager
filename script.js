@@ -2425,9 +2425,26 @@ function openTimeScaleStatistics(scaleId) {
             if (stat.isPreview && currentScale && percentage < 100) {
               const scaleStartMs = new Date(currentScale.start).getTime();
               const scaleDurationMs = (Number(currentScale.duration) || 0) * 24 * 60 * 60 * 1000;
-              const elapsedMs = Math.max(0, Date.now() - scaleStartMs);
-              const elapsedRatio = scaleDurationMs > 0 ? Math.min(1, Math.max(0, elapsedMs / scaleDurationMs)) : 1;
-              opacity = elapsedRatio.toFixed(3);
+              const scaleEndMs = scaleStartMs + scaleDurationMs;
+              const nowMs = Date.now();
+              const slotDurationMs = 15 * 60 * 1000;
+              let totalExcludedTimeMs = 0;
+              let passedExcludedTimeMs = 0;
+              Object.values(state.agenda).forEach(block => {
+                if (!block.iso || !block.busy) return;
+                const blockStartMs = new Date(block.iso).getTime();
+                if (blockStartMs >= scaleStartMs && blockStartMs < scaleEndMs) {
+                  totalExcludedTimeMs += slotDurationMs;
+                  passedExcludedTimeMs += Math.max(0, Math.min(slotDurationMs, nowMs - blockStartMs));
+                }
+              });
+              const totalTimeMs = scaleDurationMs - totalExcludedTimeMs;
+              const rawTimeUsedMs = nowMs - scaleStartMs;
+              const timeUsedMs = rawTimeUsedMs - passedExcludedTimeMs;
+              const timeRatio = totalTimeMs > 0 && !isNaN(timeUsedMs)
+                ? Math.min(1, Math.max(0, timeUsedMs / totalTimeMs))
+                : 0;
+              opacity = timeRatio.toFixed(3);
             }
 
             const streakDisplay = stat.historicalStreak > 0 ? `
