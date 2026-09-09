@@ -744,7 +744,7 @@ function streakIncreaseAnimation(scaleId) {
       <circle class="ring-bg" cx="150" cy="150" r="130" stroke-width="12" fill="transparent"/>
       <circle class="ring-fill" cx="150" cy="150" r="130" stroke-width="12" fill="transparent"/>
     </svg>
-    <div class="streak-anim-badge">
+    <div class="streak-anim-badge${oldStreak === 0 ? ' streak-anim-inactive' : ''}">
       <svg class="streak-anim-svg" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
         <path d="M12 24C17.5228 24 22 19.5228 22 14C22 8 15 2 13 0C13 0 13.5 3 12 5C10.5 7 2 9 2 15C2 19.9706 6.47715 24 12 24Z"/>
       </svg>

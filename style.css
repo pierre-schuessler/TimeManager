@@ -734,6 +734,19 @@ table > * {
   color: #ff9800;
 }
 
+.streak-anim-badge.streak-anim-inactive {
+    color: #ababab;
+}
+
+.streak-anim-badge.streak-anim-inactive .streak-anim-svg {
+    filter: none;
+}
+
+.streak-anim-badge.streak-anim-inactive .streak-anim-number {
+    color: #494949;
+    text-shadow: none;
+}
+
 .streak-anim-svg {
   width: 170px;
   height: 170px;
@@ -775,6 +788,20 @@ table > * {
 
 .streak-bump .streak-anim-svg {
   color: #ffeb3b;
+}
+
+.streak-bump.streak-anim-inactive {
+    color: #ff9800;
+}
+
+.streak-bump.streak-anim-inactive .streak-anim-svg {
+    color: #ffeb3b;
+    filter: drop-shadow(0 0 15px rgba(255, 152, 0, 0.5));
+}
+
+.streak-bump.streak-anim-inactive .streak-anim-number {
+    color: #ffffff;
+    text-shadow: 0 2px 8px rgba(216, 67, 21, 0.8);
 }
 
 .streak-bump .streak-anim-number {
