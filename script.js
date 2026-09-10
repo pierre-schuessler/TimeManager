@@ -2395,6 +2395,7 @@ function openTimeScaleStatistics(scaleId) {
 
   const taskRows = [...taskTotals.values()].sort((a, b) => b.total - a.total);
   const highestStreak = scaleStats.reduce((highest, stat) => Math.max(highest, stat.historicalStreak || 0), 0);
+  const totalWorkHistory = scaleStats.map(stat => ({ start: stat.start, elapsed: getStatWork(stat) }));
 
   let runningStreak = 0;
   scaleStats.forEach(stat => {
@@ -2446,20 +2447,25 @@ function openTimeScaleStatistics(scaleId) {
         .stats-summary-card { background: #f7f7f7; border: 1px solid #e3e3e3; border-radius: 6px; padding: 10px 8px; text-align: center; }
         .stats-summary-label { color: #666; font-size: 0.75em; display: block; margin-bottom: 5px; }
         .stats-summary-value { font-weight: 700; font-size: 0.95em; }
+        .stats-summary-card.clickable { cursor: pointer; }
+        .stats-summary-card.clickable:hover, .stats-summary-card.clickable.selected { border-color: #4b8f29; background: #f7fbf4; }
         .stats-streak-card { display: flex; align-items: center; justify-content: center; gap: 5px; }
         .task-stat-row { border: 1px solid #e3e3e3; background: #fff; border-radius: 6px; padding: 9px 10px; cursor: pointer; text-align: left; width: 100%; }
         .task-stat-row:hover, .task-stat-row.selected { border-color: #4b8f29; background: #f7fbf4; }
         .task-stat-bar { height: 6px; border-radius: 3px; background: #e5e5e5; overflow: hidden; margin-top: 6px; }
         .task-stat-bar-fill { height: 100%; background: #65a33d; }
-        .task-history-row { display: grid; grid-template-columns: 76px 1fr 90px; gap: 8px; align-items: center; font-size: 0.8em; margin-top: 7px; }
-        @media (max-width: 520px) { .stats-summary { grid-template-columns: repeat(2, 1fr); } .task-history-row { grid-template-columns: 65px 1fr 75px; } }
+        .task-history-chart { width: 100%; height: 112px; display: block; overflow: visible; }
+        .task-history-chart polyline { fill: none; stroke: #65a33d; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+        .task-history-chart circle { fill: #fff; stroke: #65a33d; stroke-width: 2; }
+        .task-history-chart text { fill: #666; font-size: 9px; }
+        @media (max-width: 520px) { .stats-summary { grid-template-columns: repeat(2, 1fr); } }
       </style>
     `;
 
     document.getElementById("modal-body").innerHTML = `
       ${styleBlock}
       <div class="stats-summary">
-        <div class="stats-summary-card"><span class="stats-summary-label">All time</span><span class="stats-summary-value">${formatStatDuration(scaleStats.reduce((total, stat) => total + getStatWork(stat), 0))}</span></div>
+        <button type="button" class="stats-summary-card clickable" id="total-work-stat" style="font: inherit;"><span class="stats-summary-label">All time</span><span class="stats-summary-value">${formatStatDuration(scaleStats.reduce((total, stat) => total + getStatWork(stat), 0))}</span></button>
         <div class="stats-summary-card"><span class="stats-summary-label">Last week</span><span class="stats-summary-value">${formatStatDuration(getWorkSince(7))}</span></div>
         <div class="stats-summary-card"><span class="stats-summary-label">Last month</span><span class="stats-summary-value">${formatStatDuration(getWorkSince(30))}</span></div>
         <div class="stats-summary-card"><span class="stats-summary-label">Last year</span><span class="stats-summary-value">${formatStatDuration(getWorkSince(365))}</span></div>
@@ -2557,19 +2563,41 @@ function openTimeScaleStatistics(scaleId) {
     
     const squares = document.querySelectorAll(".heatmap-square.time-scale");
 
+    const renderHistoryChart = (title, history) => {
+      const detail = document.getElementById('task-statistics-detail');
+      if (!detail || !history.length) return;
+      const maxElapsed = Math.max(...history.map(item => item.elapsed), 1);
+      const chartWidth = 360;
+      const chartHeight = 82;
+      const chartPadding = { top: 10, right: 12, bottom: 20, left: 34 };
+      const chartInnerWidth = chartWidth - chartPadding.left - chartPadding.right;
+      const chartInnerHeight = chartHeight - chartPadding.top - chartPadding.bottom;
+      const chartPoints = history.map((item, index) => {
+        const x = chartPadding.left + (history.length === 1 ? chartInnerWidth / 2 : index * chartInnerWidth / (history.length - 1));
+        const y = chartPadding.top + chartInnerHeight - (item.elapsed / maxElapsed) * chartInnerHeight;
+        return { ...item, x, y, date: new Date(item.start).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) };
+      });
+      const points = chartPoints.map(point => `${point.x},${point.y}`).join(' ');
+      detail.style.display = 'block';
+      const averageElapsed = history.reduce((total, item) => total + item.elapsed, 0) / history.length;
+      const averageY = chartPadding.top + chartInnerHeight - (averageElapsed / maxElapsed) * chartInnerHeight;
+      detail.innerHTML = `<strong>${escapeStatHtml(title)} by cycle</strong><svg class="task-history-chart" viewBox="0 0 ${chartWidth} ${chartHeight}" role="img" aria-label="${escapeStatHtml(title)} work per cycle"><line x1="${chartPadding.left}" y1="${chartPadding.top}" x2="${chartPadding.left}" y2="${chartPadding.top + chartInnerHeight}" stroke="#aaa" /><line x1="${chartPadding.left}" y1="${averageY}" x2="${chartWidth - chartPadding.right}" y2="${averageY}" stroke="#eee" stroke-dasharray="2 2" /><line x1="${chartPadding.left}" y1="${chartPadding.top + chartInnerHeight}" x2="${chartWidth - chartPadding.right}" y2="${chartPadding.top + chartInnerHeight}" stroke="#ddd" /><text x="${chartPadding.left - 4}" y="${chartPadding.top + 3}" text-anchor="end">${formatStatDuration(maxElapsed)}</text><text x="${chartPadding.left - 4}" y="${averageY + 3}" text-anchor="end">${formatStatDuration(averageElapsed)}</text><text x="${chartPadding.left - 4}" y="${chartPadding.top + chartInnerHeight + 3}" text-anchor="end">0</text><polyline points="${points}" />${chartPoints.map(point => `<circle cx="${point.x}" cy="${point.y}" r="3"><title>${point.date}: ${formatStatDuration(point.elapsed)}</title></circle>`).join('')}<text x="${chartPadding.left}" y="${chartHeight - 4}">${chartPoints[0].date}</text><text x="${chartWidth - chartPadding.right}" y="${chartHeight - 4}" text-anchor="end">${chartPoints[chartPoints.length - 1].date}</text></svg>`;
+    };
+
     document.querySelectorAll('.task-stat-row').forEach(row => row.addEventListener('click', () => {
       const task = taskTotals.get(row.dataset.taskId);
-      const detail = document.getElementById('task-statistics-detail');
-      if (!task || !detail) return;
+      if (!task) return;
       document.querySelectorAll('.task-stat-row').forEach(item => item.classList.remove('selected'));
+      document.getElementById('total-work-stat')?.classList.remove('selected');
       row.classList.add('selected');
-      const maxElapsed = Math.max(...task.history.map(item => item.elapsed), 1);
-      detail.style.display = 'block';
-      detail.innerHTML = `<strong>${escapeStatHtml(task.name)} by cycle</strong>${task.history.slice().reverse().map(item => {
-        const date = new Date(item.start).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-        return `<div class="task-history-row"><span>${date}</span><div class="task-stat-bar"><div class="task-stat-bar-fill" style="width: ${(item.elapsed / maxElapsed) * 100}%;"></div></div><span style="text-align: right;">${formatStatDuration(item.elapsed)}</span></div>`;
-      }).join('')}`;
+      renderHistoryChart(task.name, task.history);
     }));
+
+    document.getElementById('total-work-stat')?.addEventListener('click', event => {
+      document.querySelectorAll('.task-stat-row').forEach(item => item.classList.remove('selected'));
+      event.currentTarget.classList.add('selected');
+      renderHistoryChart('Total work', totalWorkHistory);
+    });
     
     squares.forEach(square => {
       square.addEventListener("mouseenter", (e) => {
