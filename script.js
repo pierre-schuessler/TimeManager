@@ -2370,6 +2370,32 @@ function openTimeScaleStatistics(scaleId) {
     });
   }
 
+  const formatStatDuration = seconds => formatDuration(Math.max(0, Number(seconds) || 0) * 1000);
+  const escapeStatHtml = value => String(value ?? '').replace(/[&<>'"]/g, character => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+  }[character]));
+  const getStatWork = stat => (stat.tasks || []).reduce((total, task) => total + (Number(task.elapsed) || 0), 0);
+  const now = Date.now();
+  const getWorkSince = days => scaleStats
+    .filter(stat => new Date(stat.start).getTime() >= now - days * 24 * 60 * 60 * 1000)
+    .reduce((total, stat) => total + getStatWork(stat), 0);
+  const taskTotals = new Map();
+
+  scaleStats.forEach(stat => {
+    (stat.tasks || []).forEach(task => {
+      const taskId = task.id || task.name;
+      if (!taskTotals.has(taskId)) taskTotals.set(taskId, { id: taskId, name: task.name || 'Unnamed task', total: 0, cycles: 0, history: [] });
+      const aggregate = taskTotals.get(taskId);
+      const elapsed = Number(task.elapsed) || 0;
+      aggregate.total += elapsed;
+      aggregate.cycles++;
+      aggregate.history.push({ start: stat.start, elapsed });
+    });
+  });
+
+  const taskRows = [...taskTotals.values()].sort((a, b) => b.total - a.total);
+  const highestStreak = scaleStats.reduce((highest, stat) => Math.max(highest, stat.historicalStreak || 0), 0);
+
   let runningStreak = 0;
   scaleStats.forEach(stat => {
     let totals = (stat.tasks || []).reduce((acc, task) => {
@@ -2386,15 +2412,7 @@ function openTimeScaleStatistics(scaleId) {
     stat.historicalStreak = runningStreak;
   });
 
-  if (scaleStats.length === 1 && scaleStats[0].isPreview) {
-    document.getElementById("modal-title").innerText = "Statistics";
-    document.getElementById("modal-body").innerHTML = `
-      <div style="text-align: center; color: #666; padding: 30px 10px;">
-        <div style="font-size: 2em; margin-bottom: 10px;">📊</div>
-        No statistics available yet.<br>Complete a cycle for this time scale to see your history!
-      </div>
-    `;
-  } else {
+  {
     const STATS_PER_ROW = 14;
     const scaleName = currentScale ? currentScale.name : scaleStats[0].name;
     document.getElementById("modal-title").innerText = `Statistics for ${scaleName}`;
@@ -2424,11 +2442,40 @@ function openTimeScaleStatistics(scaleId) {
         .tt-progress-bar { width: 100%; background-color: #eee; border-radius: 4px; height: 8px; overflow: hidden; margin: 4px 0 10px 0; }
         .tt-progress-fill { height: 100%; transition: width 0.3s; }
         .tt-task-row { display: flex; justify-content: space-between; font-size: 0.85em; margin-bottom: 2px; align-items: flex-end; }
+        .stats-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
+        .stats-summary-card { background: #f7f7f7; border: 1px solid #e3e3e3; border-radius: 6px; padding: 10px 8px; text-align: center; }
+        .stats-summary-label { color: #666; font-size: 0.75em; display: block; margin-bottom: 5px; }
+        .stats-summary-value { font-weight: 700; font-size: 0.95em; }
+        .stats-streak-card { display: flex; align-items: center; justify-content: center; gap: 5px; }
+        .task-stat-row { border: 1px solid #e3e3e3; background: #fff; border-radius: 6px; padding: 9px 10px; cursor: pointer; text-align: left; width: 100%; }
+        .task-stat-row:hover, .task-stat-row.selected { border-color: #4b8f29; background: #f7fbf4; }
+        .task-stat-bar { height: 6px; border-radius: 3px; background: #e5e5e5; overflow: hidden; margin-top: 6px; }
+        .task-stat-bar-fill { height: 100%; background: #65a33d; }
+        .task-history-row { display: grid; grid-template-columns: 76px 1fr 90px; gap: 8px; align-items: center; font-size: 0.8em; margin-top: 7px; }
+        @media (max-width: 520px) { .stats-summary { grid-template-columns: repeat(2, 1fr); } .task-history-row { grid-template-columns: 65px 1fr 75px; } }
       </style>
     `;
 
     document.getElementById("modal-body").innerHTML = `
       ${styleBlock}
+      <div class="stats-summary">
+        <div class="stats-summary-card"><span class="stats-summary-label">All time</span><span class="stats-summary-value">${formatStatDuration(scaleStats.reduce((total, stat) => total + getStatWork(stat), 0))}</span></div>
+        <div class="stats-summary-card"><span class="stats-summary-label">Last week</span><span class="stats-summary-value">${formatStatDuration(getWorkSince(7))}</span></div>
+        <div class="stats-summary-card"><span class="stats-summary-label">Last month</span><span class="stats-summary-value">${formatStatDuration(getWorkSince(30))}</span></div>
+        <div class="stats-summary-card"><span class="stats-summary-label">Last year</span><span class="stats-summary-value">${formatStatDuration(getWorkSince(365))}</span></div>
+        <div class="stats-summary-card stats-streak-card" style="flex-direction: column;"><span class="stats-summary-label" style="margin: 0;">Best streak</span><div class="streak-badge active" style="transform: scale(0.52); transform-origin: center; margin: -12px 0; text-shadow: none;"><svg class="flame-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 24C17.5228 24 22 19.5228 22 14C22 8 15 2 13 0C13 0 13.5 3 12 5C10.5 7 2 9 2 15C2 19.9706 6.47715 24 12 24Z"/></svg><span class="streak-number">${highestStreak}</span></div></div>
+      </div>
+      <div style="font-weight: 700; margin: 4px 0 8px;">Work by task</div>
+      <div id="task-statistics-list" style="display: grid; gap: 7px; margin-bottom: 14px;">
+        ${taskRows.length ? taskRows.map(task => `
+          <button type="button" class="task-stat-row" data-task-id="${escapeStatHtml(task.id)}">
+            <div style="display: flex; justify-content: space-between; gap: 8px;"><strong style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeStatHtml(task.name)}</strong><span>${formatStatDuration(task.total)} total</span></div>
+            <div style="display: flex; justify-content: space-between; color: #666; font-size: 0.8em; margin-top: 3px;"><span>${task.cycles} cycle${task.cycles === 1 ? '' : 's'}</span><span>${formatStatDuration(task.total / task.cycles)} average / cycle</span></div>
+            <div class="task-stat-bar"><div class="task-stat-bar-fill" style="width: ${taskRows[0].total ? (task.total / taskRows[0].total) * 100 : 0}%;"></div></div>
+          </button>
+        `).join('') : '<div style="color: #666; padding: 8px 0;">No task time recorded yet.</div>'}
+      </div>
+      <div id="task-statistics-detail" style="display: none; border-top: 1px solid #eee; padding-top: 10px;"></div>
       <div id="modal-statistics-container" style="max-height: 60vh; overflow-y: auto; display: grid; grid-template-columns: repeat(${STATS_PER_ROW}, 1fr); gap: 5px; padding: 5px;">
         ${
           scaleStats.map((stat, index)=>{
@@ -2508,7 +2555,21 @@ function openTimeScaleStatistics(scaleId) {
       document.body.appendChild(tooltip);
     }
     
-    const squares = document.querySelectorAll(".heatmap-square");
+    const squares = document.querySelectorAll(".heatmap-square.time-scale");
+
+    document.querySelectorAll('.task-stat-row').forEach(row => row.addEventListener('click', () => {
+      const task = taskTotals.get(row.dataset.taskId);
+      const detail = document.getElementById('task-statistics-detail');
+      if (!task || !detail) return;
+      document.querySelectorAll('.task-stat-row').forEach(item => item.classList.remove('selected'));
+      row.classList.add('selected');
+      const maxElapsed = Math.max(...task.history.map(item => item.elapsed), 1);
+      detail.style.display = 'block';
+      detail.innerHTML = `<strong>${escapeStatHtml(task.name)} by cycle</strong>${task.history.slice().reverse().map(item => {
+        const date = new Date(item.start).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+        return `<div class="task-history-row"><span>${date}</span><div class="task-stat-bar"><div class="task-stat-bar-fill" style="width: ${(item.elapsed / maxElapsed) * 100}%;"></div></div><span style="text-align: right;">${formatStatDuration(item.elapsed)}</span></div>`;
+      }).join('')}`;
+    }));
     
     squares.forEach(square => {
       square.addEventListener("mouseenter", (e) => {
