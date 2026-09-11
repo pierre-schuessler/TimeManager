@@ -848,6 +848,7 @@ async function toggleTask(id, UITarget) {
     startTime = new Date().getTime();
     startCounters = JSON.parse(JSON.stringify(task.times));
     lastTime = startTime;
+    task.startedAt = startTime;
     task.lastTimerUpdateAt = startTime;
 
     UpdateTasksRender();
@@ -2212,7 +2213,7 @@ function checkTimeScaleDone() {
           return isFirstCycle ? Number(task.times[scale.id]?.elapsed) || 0 : 0;
         }
 
-        const lastRecordedAt = Number(task.lastTimerUpdateAt) || nowMs;
+        const lastRecordedAt = Number(task.lastTimerUpdateAt) || Number(task.startedAt) || nowMs;
         const persistedElapsed = Number(task.times[scale.id]?.elapsed) || 0;
         const offlineWorked = Math.max(0, Math.min(nowMs, cycleEndMs) - Math.max(lastRecordedAt, cycleStartMs)) / 1000;
         const persistedBelongsToCycle = lastRecordedAt >= cycleStartMs && lastRecordedAt < cycleEndMs;
