@@ -622,6 +622,7 @@ timerWorker.onmessage = function(e) {
 
     let now = new Date().getTime();
     let elapsedTime = (now - startTime) / 1000;
+    task.lastTimerUpdateAt = now;
     deltaTime = now - lastTime;
     lastTime = now;
     
@@ -847,6 +848,7 @@ async function toggleTask(id, UITarget) {
     startTime = new Date().getTime();
     startCounters = JSON.parse(JSON.stringify(task.times));
     lastTime = startTime;
+    task.lastTimerUpdateAt = startTime;
 
     UpdateTasksRender();
     UpdateTimeScalesRender();
@@ -2192,6 +2194,7 @@ function checkTimeScaleDone() {
   let SomethingChanged = false;
   let nowMs = new Date().getTime();
   let lostScales = [];
+  let runningTaskAfterCheck = null;
 
   Object.values(state.timeScales).forEach((scale) => {
     const scaleDurationMs = scale.duration * 24 * 60 * 60 * 1000;
@@ -2202,10 +2205,28 @@ function checkTimeScaleDone() {
       let isFirstMissedCycle = true;
       let missedThisCheck = false;
       let streakBeforeMiss = getTimeScaleStreak(scale.id);
+      const runningTask = Object.values(state.tasks).find(task => task.running);
+      const finalCycleStartMs = scaleStartMs + Math.ceil((nowMs - scaleStartMs) / scaleDurationMs) * scaleDurationMs;
+      const getRunningTaskElapsed = (task, cycleStartMs, cycleEndMs, isFirstCycle) => {
+        if (task !== runningTask || !startTime) {
+          return isFirstCycle ? Number(task.times[scale.id]?.elapsed) || 0 : 0;
+        }
+
+        const lastRecordedAt = Number(task.lastTimerUpdateAt) || nowMs;
+        const persistedElapsed = Number(task.times[scale.id]?.elapsed) || 0;
+        const offlineWorked = Math.max(0, Math.min(nowMs, cycleEndMs) - Math.max(lastRecordedAt, cycleStartMs)) / 1000;
+        const persistedBelongsToCycle = lastRecordedAt >= cycleStartMs && lastRecordedAt < cycleEndMs;
+        return (persistedBelongsToCycle ? persistedElapsed : 0) + offlineWorked;
+      };
+      const runningTaskCarryover = runningTask
+        ? getRunningTaskElapsed(runningTask, finalCycleStartMs, nowMs, false)
+        : 0;
 
       while (scaleStartMs + scaleDurationMs <= nowMs) {
+        const cycleEndMs = scaleStartMs + scaleDurationMs;
         const totals = Object.values(state.tasks).reduce((acc, task) => {
-          acc.elapsed += isFirstMissedCycle ? (Number(task.times[scale.id]?.elapsed) || 0) : 0; 
+          const elapsed = getRunningTaskElapsed(task, scaleStartMs, cycleEndMs, isFirstMissedCycle);
+          acc.elapsed += elapsed;
           acc.goal += Number(task.times[scale.id]?.goal) || 0;
           return acc;
         }, { elapsed: 0, goal: 0 });
@@ -2224,10 +2245,11 @@ function checkTimeScaleDone() {
           duration: scale.duration,
           start: new Date(scaleStartMs).toISOString(),
           tasks: Object.values(state.tasks).map((task) => {
+            const elapsed = getRunningTaskElapsed(task, scaleStartMs, cycleEndMs, isFirstMissedCycle);
             return { 
               id: task.id, 
               name: task.name, 
-              elapsed: isFirstMissedCycle ? (task.times[scale.id]?.elapsed || 0) : 0, 
+              elapsed,
               goal: task.times[scale.id]?.goal || 0 
             }
           })
@@ -2243,21 +2265,23 @@ function checkTimeScaleDone() {
       finalDate.setHours(0, 0, 0, 0);
       scale.start = finalDate.toISOString();
       
-      let runningTask = null;
       Object.values(state.tasks).forEach((task) => {
         if (task.times && task.times[scale.id]) {
-            task.times[scale.id].elapsed = 0;
+            const carryover = task === runningTask
+              ? Math.min(Number(task.times[scale.id].elapsed) || 0, runningTaskCarryover)
+              : 0;
+            task.times[scale.id].elapsed = carryover;
             task.times[scale.id].sessions = 0;
         }
-        if (task.running) runningTask = task;
+        if (task.running) runningTaskAfterCheck = task;
       });
-
-      if (runningTask) {
-        startTime = new Date().getTime();
-        startCounters = JSON.parse(JSON.stringify(runningTask.times));
-      }
     }
   });
+
+  if (runningTaskAfterCheck) {
+    startTime = new Date().getTime();
+    startCounters = JSON.parse(JSON.stringify(runningTaskAfterCheck.times));
+  }
 
   if (SomethingChanged) { 
     Save(true); 
