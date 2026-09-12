@@ -1161,11 +1161,12 @@ function deleteTask(id) {
 }
 
 function createNewSubtask(taskId) {
-  let task = state.tasks[taskId];
   if (auth.currentUser && !hasSyncedWithFirebase) {
     showFirebaseUpdateWarning("out-of-sync");
     return;
   }
+  let task = state.tasks[taskId];
+  
   let subtaskName = prompt("What do you need to do?");
   lastTick = performance.now();
   if (subtaskName && subtaskName.trim() !== "") {
@@ -1176,6 +1177,11 @@ function createNewSubtask(taskId) {
 }
 
 function toggleSubtask(taskId, subtaskId) {
+  if (auth.currentUser && !hasSyncedWithFirebase) {
+    showFirebaseUpdateWarning("out-of-sync");
+    return;
+  }
+
   let task = state.tasks[taskId];
   let subtask = task.subtasks[subtaskId];
 
