@@ -789,7 +789,8 @@ function streakIncreaseAnimation(scaleId) {
 async function toggleTask(id, UITarget) {
   let task = state.tasks[id];
   if (!task) return; 
-  
+  checkTimeScaleDone();
+
   timerWorker.postMessage('stop'); 
   
   if (task.running) {
@@ -2215,18 +2216,38 @@ function checkTimeScaleDone() {
       const runningTask = Object.values(state.tasks).find(task => task.running);
       const finalCycleStartMs = scaleStartMs + Math.ceil((nowMs - scaleStartMs) / scaleDurationMs) * scaleDurationMs;
       const getRunningTaskElapsed = (task, cycleStartMs, cycleEndMs, isFirstCycle) => {
+        if (task.isHabit) {
+          return isFirstCycle
+            ? (Number(task.times[scale.id]?.sessions) || 0) * (Number(task.sessionDuration) || 0)
+            : 0;
+        }
+
         if (task !== runningTask || !startTime) {
           return isFirstCycle ? Number(task.times[scale.id]?.elapsed) || 0 : 0;
         }
 
         const lastRecordedAt = Number(task.lastTimerUpdateAt) || Number(task.startedAt) || nowMs;
         const persistedElapsed = Number(task.times[scale.id]?.elapsed) || 0;
+        const taskRunStart = Number(task.startedAt) || startTime;
+        if (isFirstCycle && taskRunStart < cycleStartMs && lastRecordedAt >= cycleEndMs) {
+          const elapsedAfterCycle = (lastRecordedAt - cycleEndMs) / 1000;
+          return Math.max(0, persistedElapsed - elapsedAfterCycle);
+        }
+
         const offlineWorked = Math.max(0, Math.min(nowMs, cycleEndMs) - Math.max(lastRecordedAt, cycleStartMs)) / 1000;
         const persistedBelongsToCycle = lastRecordedAt >= cycleStartMs && lastRecordedAt < cycleEndMs;
         return (persistedBelongsToCycle ? persistedElapsed : 0) + offlineWorked;
       };
-      const runningTaskCarryover = runningTask
-        ? getRunningTaskElapsed(runningTask, finalCycleStartMs, nowMs, false)
+      const runningTaskCarryover = runningTask && !runningTask.isHabit
+        ? (() => {
+            const lastRecordedAt = Number(runningTask.lastTimerUpdateAt) || Number(runningTask.startedAt) || nowMs;
+            const persistedElapsed = Number(runningTask.times[scale.id]?.elapsed) || 0;
+            const taskRunStart = Number(runningTask.startedAt) || startTime;
+            if (taskRunStart < finalCycleStartMs) {
+              return Math.max(0, nowMs - finalCycleStartMs) / 1000;
+            }
+            return persistedElapsed + Math.max(0, nowMs - lastRecordedAt) / 1000;
+          })()
         : 0;
 
       while (scaleStartMs + scaleDurationMs <= nowMs) {
@@ -2275,7 +2296,9 @@ function checkTimeScaleDone() {
       Object.values(state.tasks).forEach((task) => {
         if (task.times && task.times[scale.id]) {
             const carryover = task === runningTask
-              ? Math.min(Number(task.times[scale.id].elapsed) || 0, runningTaskCarryover)
+              ? task.isHabit
+                ? 0
+                : Math.min(Number(task.times[scale.id].elapsed) || 0, runningTaskCarryover)
               : 0;
             task.times[scale.id].elapsed = carryover;
             task.times[scale.id].sessions = 0;
@@ -2287,6 +2310,8 @@ function checkTimeScaleDone() {
 
   if (runningTaskAfterCheck) {
     startTime = new Date().getTime();
+    runningTaskAfterCheck.startedAt = startTime;
+    runningTaskAfterCheck.lastTimerUpdateAt = startTime;
     startCounters = JSON.parse(JSON.stringify(runningTaskAfterCheck.times));
   }
 
