@@ -515,17 +515,10 @@ async function Save(firebase = false) {
     cleanTasks[task.id] = { ...task, running: !!task.running, subtasks: cleanSubtasks };
   });
 
-  const earliestStart = Object.values(state.timeScales).reduce((min, scale) => {
-    const scaleStart = new Date(scale.start).getTime();
-    return scaleStart < min ? scaleStart : min;
-  }, Infinity);
-
   let cleanAgenda = {};
   Object.entries(state.agenda).forEach(([iso, item]) => {
-    const itemTime = new Date(iso).getTime();
     const hasData = item.busy || (item.tasksWorked && Object.keys(item.tasksWorked).length > 0);
-    const isAfterStart = itemTime >= (earliestStart - 2 * 86400 * 1000);
-    if (hasData && isAfterStart) {
+    if (hasData) {
       cleanAgenda[iso] = item;
     }
   });
