@@ -89,6 +89,25 @@ let state = {
   statistics: {}
 }
 
+function getTimerBaseline(task) {
+  const baseline = JSON.parse(JSON.stringify(
+    auth.currentUser ? task.times || {} : task.timerBaseline || task.times || {}
+  ));
+  if (task.timerBaseline) return baseline;
+
+  const sessionStartMs = Number(task.startedAt);
+  const lastRecordedAt = Number(task.lastTimerUpdateAt);
+  if (!task.running || !Number.isFinite(sessionStartMs) || !Number.isFinite(lastRecordedAt) || lastRecordedAt < sessionStartMs) {
+    return baseline;
+  }
+
+  const sessionElapsed = (lastRecordedAt - sessionStartMs) / 1000;
+  Object.values(baseline).forEach(time => {
+    time.elapsed = Math.max(0, (Number(time.elapsed) || 0) - sessionElapsed);
+  });
+  return baseline;
+}
+
 function getSafeIsoString(date) {
   return date.toISOString().split('.')[0] + 'Z';
 }
@@ -237,7 +256,7 @@ onAuthStateChanged(auth, async (user) => {
   if (runningTask) {
     document.body.classList.add("active");
     startTime = runningTask.startedAt || new Date().getTime();
-    startCounters = JSON.parse(JSON.stringify(runningTask.times));
+    startCounters = getTimerBaseline(runningTask);
     lastTime = new Date().getTime();
     catchUpLocalAgenda();
     timerWorker.postMessage('start');
@@ -407,7 +426,7 @@ function setupFirebaseListener() {
       if (isRunningNow && (!wasRunning || wasRunning.id !== isRunningNow.id)) {
         document.body.classList.add("active");
         startTime = isRunningNow.startedAt || new Date().getTime();
-        startCounters = JSON.parse(JSON.stringify(isRunningNow.times));
+        startCounters = getTimerBaseline(isRunningNow);
         lastTime = new Date().getTime();
         catchUpLocalAgenda();
         timerWorker.postMessage('start');
@@ -837,6 +856,9 @@ async function toggleTask(id, UITarget) {
     });
     
     task.running = true;
+    if (!auth.currentUser) {
+      task.timerBaseline = JSON.parse(JSON.stringify(task.times));
+    }
     const user = auth.currentUser;
     if (user) {
       isSavingLocally = true;
@@ -847,7 +869,7 @@ async function toggleTask(id, UITarget) {
     }
 
     startTime = new Date().getTime();
-    startCounters = JSON.parse(JSON.stringify(task.times));
+    startCounters = getTimerBaseline(task);
     lastTime = startTime;
     task.startedAt = startTime;
     task.lastTimerUpdateAt = startTime;
@@ -2214,7 +2236,6 @@ function checkTimeScaleDone() {
       let missedThisCheck = false;
       let streakBeforeMiss = getTimeScaleStreak(scale.id);
       const runningTask = Object.values(state.tasks).find(task => task.running);
-      const finalCycleStartMs = scaleStartMs + Math.ceil((nowMs - scaleStartMs) / scaleDurationMs) * scaleDurationMs;
       const getRunningTaskElapsed = (task, cycleStartMs, cycleEndMs, isFirstCycle) => {
         if (task.isHabit) {
           return isFirstCycle
@@ -2226,29 +2247,19 @@ function checkTimeScaleDone() {
           return isFirstCycle ? Number(task.times[scale.id]?.elapsed) || 0 : 0;
         }
 
-        const lastRecordedAt = Number(task.lastTimerUpdateAt) || Number(task.startedAt) || nowMs;
-        const persistedElapsed = Number(task.times[scale.id]?.elapsed) || 0;
-        const taskRunStart = Number(task.startedAt) || startTime;
-        if (isFirstCycle && taskRunStart < cycleStartMs && lastRecordedAt >= cycleEndMs) {
-          const elapsedAfterCycle = (lastRecordedAt - cycleEndMs) / 1000;
-          return Math.max(0, persistedElapsed - elapsedAfterCycle);
-        }
+        if (!isFirstCycle) return 0;
 
-        const offlineWorked = Math.max(0, Math.min(nowMs, cycleEndMs) - Math.max(lastRecordedAt, cycleStartMs)) / 1000;
-        const persistedBelongsToCycle = lastRecordedAt >= cycleStartMs && lastRecordedAt < cycleEndMs;
-        return (persistedBelongsToCycle ? persistedElapsed : 0) + offlineWorked;
+        const sessionStartMs = Number(startTime);
+        const sessionBaseline = Number(startCounters?.[scale.id]?.elapsed) || 0;
+        const baselineBelongsToCycle = sessionStartMs < cycleEndMs;
+        const sessionWorked = Math.max(
+          0,
+          Math.min(nowMs, cycleEndMs) - Math.max(sessionStartMs, cycleStartMs)
+        ) / 1000;
+
+        return (baselineBelongsToCycle ? sessionBaseline : 0) + sessionWorked;
       };
-      const runningTaskCarryover = runningTask && !runningTask.isHabit
-        ? (() => {
-            const lastRecordedAt = Number(runningTask.lastTimerUpdateAt) || Number(runningTask.startedAt) || nowMs;
-            const persistedElapsed = Number(runningTask.times[scale.id]?.elapsed) || 0;
-            const taskRunStart = Number(runningTask.startedAt) || startTime;
-            if (taskRunStart < finalCycleStartMs) {
-              return Math.max(0, nowMs - finalCycleStartMs) / 1000;
-            }
-            return persistedElapsed + Math.max(0, nowMs - lastRecordedAt) / 1000;
-          })()
-        : 0;
+      let completedRunningTaskElapsed = 0;
 
       while (scaleStartMs + scaleDurationMs <= nowMs) {
         const cycleEndMs = scaleStartMs + scaleDurationMs;
@@ -2258,6 +2269,10 @@ function checkTimeScaleDone() {
           acc.goal += Number(task.times[scale.id]?.goal) || 0;
           return acc;
         }, { elapsed: 0, goal: 0 });
+
+        if (runningTask && !runningTask.isHabit) {
+          completedRunningTaskElapsed += getRunningTaskElapsed(runningTask, scaleStartMs, cycleEndMs, isFirstMissedCycle);
+        }
 
         if (totals.goal > 0 && totals.elapsed < totals.goal) {
           missedThisCheck = true;
@@ -2287,10 +2302,17 @@ function checkTimeScaleDone() {
         isFirstMissedCycle = false;
       }
 
+      const runningTaskCarryover = runningTask && !runningTask.isHabit
+        ? (() => {
+            const sessionBaseline = Number(startCounters?.[scale.id]?.elapsed) || 0;
+            const currentElapsed = sessionBaseline + Math.max(0, nowMs - Number(startTime)) / 1000;
+            return Math.max(0, currentElapsed - completedRunningTaskElapsed);
+          })()
+        : 0;
+
       if (missedThisCheck) lostScales.push({ id: scale.id, lostStreak: streakBeforeMiss });
 
       let finalDate = new Date(scaleStartMs);
-      finalDate.setHours(0, 0, 0, 0);
       scale.start = finalDate.toISOString();
       
       Object.values(state.tasks).forEach((task) => {
@@ -2298,7 +2320,7 @@ function checkTimeScaleDone() {
             const carryover = task === runningTask
               ? task.isHabit
                 ? 0
-                : Math.min(Number(task.times[scale.id].elapsed) || 0, runningTaskCarryover)
+                : runningTaskCarryover
               : 0;
             task.times[scale.id].elapsed = carryover;
             task.times[scale.id].sessions = 0;
@@ -2312,7 +2334,10 @@ function checkTimeScaleDone() {
     startTime = new Date().getTime();
     runningTaskAfterCheck.startedAt = startTime;
     runningTaskAfterCheck.lastTimerUpdateAt = startTime;
-    startCounters = JSON.parse(JSON.stringify(runningTaskAfterCheck.times));
+    if (!auth.currentUser) {
+      runningTaskAfterCheck.timerBaseline = JSON.parse(JSON.stringify(runningTaskAfterCheck.times));
+    }
+    startCounters = getTimerBaseline(runningTaskAfterCheck);
   }
 
   if (SomethingChanged) { 
