@@ -388,7 +388,6 @@ function setupFirebaseListener() {
     if (isSavingLocally) {
       isSavingLocally = false; 
       hasSyncedWithFirebase = true;
-      return; 
     }
     
     if (snapshot.exists()) {
@@ -669,13 +668,13 @@ timerWorker.onmessage = function(e) {
     }
 
     const wasAllCompleted = Object.values(state.timeScales).every(scale =>
-      task.times[scale.id].elapsed >= task.times[scale.id].goal
+      getProgressElapsed(task, scale.id) >= task.times[scale.id].goal
     );
 
     const prevScaleCompletion = {};
     Object.values(state.timeScales).forEach(scale => {
       const totals = Object.values(state.tasks).reduce((acc, t) => {
-        acc.elapsed += Math.min(Number(t.times[scale.id]?.elapsed) || 0, Number(t.times[scale.id]?.goal) || 0);
+        acc.elapsed += Math.min(getProgressElapsed(t, scale.id), Number(t.times[scale.id]?.goal) || 0);
         acc.goal += Number(t.times[scale.id]?.goal) || 0;
         return acc;
       }, { elapsed: 0, goal: 0 });
@@ -688,20 +687,26 @@ timerWorker.onmessage = function(e) {
       if(!startCounters[scale.id]) startCounters[scale.id] = {elapsed: 0, goal: 3600, sessions: 0, targetSessions: 1};
 
       const newElapsed = Math.round(startCounters[scale.id].elapsed + elapsedTime);
-      if (task.times[scale.id].elapsed < task.times[scale.id].goal && newElapsed >= task.times[scale.id].goal) {
+      const projectedElapsed = task.isHabit
+        ? Math.max(
+            (Number(task.times[scale.id].sessions) || 0) * (Number(task.sessionDuration) || 0),
+            Math.min(newElapsed, ((Number(task.times[scale.id].sessions) || 0) + 1) * (Number(task.sessionDuration) || 0) - 1)
+          )
+        : newElapsed;
+      if (getProgressElapsed(task, scale.id) < task.times[scale.id].goal && projectedElapsed >= task.times[scale.id].goal) {
         anyCrossed = true;
       }
       task.times[scale.id].elapsed = newElapsed;
     });
 
     const isAllCompleted = Object.values(state.timeScales).every(scale =>
-      task.times[scale.id].elapsed >= task.times[scale.id].goal
+      getProgressElapsed(task, scale.id) >= task.times[scale.id].goal
     );
 
     let scaleFinished = false;
     Object.values(state.timeScales).forEach(scale => {
       const totals = Object.values(state.tasks).reduce((acc, t) => {
-        acc.elapsed += Math.min(Number(t.times[scale.id]?.elapsed) || 0, Number(t.times[scale.id]?.goal) || 0);
+        acc.elapsed += Math.min(getProgressElapsed(t, scale.id), Number(t.times[scale.id]?.goal) || 0);
         acc.goal += Number(t.times[scale.id]?.goal) || 0;
         return acc;
       }, { elapsed: 0, goal: 0 });
@@ -728,7 +733,7 @@ function streakIncreaseAnimation(scaleId) {
 
   
   const totals = Object.values(state.tasks).reduce((acc, t) => {
-    acc.elapsed += Math.min(Number(t.times[scaleId]?.elapsed) || 0, Number(t.times[scaleId]?.goal) || 0);
+    acc.elapsed += Math.min(getProgressElapsed(t, scaleId), Number(t.times[scaleId]?.goal) || 0);
     acc.goal += Number(t.times[scaleId]?.goal) || 0;
     return acc;
   }, { elapsed: 0, goal: 0 });
@@ -924,22 +929,18 @@ function snapSession(taskId) {
   let task = state.tasks[taskId];
   if (!task || !task.isHabit) return;
 
-  if (task.running) {
-    toggleTask(taskId, null);
-  }
-
   let firstScaleId = Object.keys(state.timeScales)[0];
   
   let anyCrossed = false;
   let isAllCompleted = true;
   let wasAllCompleted = Object.values(state.timeScales).every(scale =>
-    task.times[scale.id].elapsed >= task.times[scale.id].goal
+    getProgressElapsed(task, scale.id) >= task.times[scale.id].goal
   );
 
   const prevScaleCompletion = {};
   Object.values(state.timeScales).forEach(scale => {
     const totals = Object.values(state.tasks).reduce((acc, t) => {
-      acc.elapsed += Math.min(Number(t.times[scale.id]?.elapsed) || 0, Number(t.times[scale.id]?.goal) || 0);
+      acc.elapsed += Math.min(getProgressElapsed(t, scale.id), Number(t.times[scale.id]?.goal) || 0);
       acc.goal += Number(t.times[scale.id]?.goal) || 0;
       return acc;
     }, { elapsed: 0, goal: 0 });
@@ -951,9 +952,11 @@ function snapSession(taskId) {
       let currentSessions = task.times[scaleId].sessions || 0;
       let newSessions = currentSessions + 1;
       
-      let oldElapsed = task.times[scaleId].elapsed;
-      let newElapsed = newSessions * task.sessionDuration;
       let goal = task.times[scaleId].goal;
+      let oldElapsed = getProgressElapsed(task, scaleId);
+
+      task.times[scaleId].sessions = newSessions;
+      let newElapsed = getProgressElapsed(task, scaleId);
 
       if (oldElapsed < goal && newElapsed >= goal) {
         anyCrossed = true;
@@ -962,16 +965,13 @@ function snapSession(taskId) {
       if (newElapsed < goal) {
         isAllCompleted = false;
       }
-
-      task.times[scaleId].sessions = newSessions;
-      task.times[scaleId].elapsed = newElapsed;
     }
   });
 
   let scaleFinished = false;
   Object.values(state.timeScales).forEach(scale => {
     const totals = Object.values(state.tasks).reduce((acc, t) => {
-      acc.elapsed += Math.min(Number(t.times[scale.id]?.elapsed) || 0, Number(t.times[scale.id]?.goal) || 0);
+      acc.elapsed += Math.min(getProgressElapsed(t, scale.id), Number(t.times[scale.id]?.goal) || 0);
       acc.goal += Number(t.times[scale.id]?.goal) || 0;
       return acc;
     }, { elapsed: 0, goal: 0 });
@@ -1045,8 +1045,12 @@ async function editTask(id) {
         Object.values(state.timeScales).map(scale => {
           const ts = task.times[scale.id]?.targetSessions || 1;
           const currentSessions = task.times[scale.id]?.sessions || 0;
+          const elapsedSeconds = Number(task.times[scale.id]?.elapsed) || 0;
+          const elapsedHours = Math.floor(elapsedSeconds / 3600);
+          const elapsedMinutes = Math.floor((elapsedSeconds % 3600) / 60);
+          const elapsedRemainderSeconds = elapsedSeconds % 60;
           return `
-            <div style="display: flex; gap: 15px; margin-bottom: 10px;">
+            <div style="display: flex; gap: 15px; margin-bottom: 10px; flex-wrap: wrap;">
               <div class="form-group" style="flex: 1; margin-bottom: 0;">
                 <label>${scale.name} Completed Sessions</label>
                 <input type="number" id="modal-completed-${scale.id}" value="${currentSessions}" min="0" style="width: 100%;">
@@ -1054,6 +1058,14 @@ async function editTask(id) {
               <div class="form-group" style="flex: 1; margin-bottom: 0;">
                 <label>${scale.name} Target Sessions <span style="color:red">*</span></label>
                 <input type="number" id="modal-target-${scale.id}" value="${ts}" min="0" style="width: 100%;">
+              </div>
+              <div class="form-group" style="flex: 1 1 100%; margin-bottom: 0;">
+                <label>${scale.name} Elapsed Time</label>
+                <div style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap;">
+                  <input type="number" id="modal-elapsed-${scale.id}-h" value="${elapsedHours}" min="0" placeholder="HH" style="width: 55px;"> h
+                  <input type="number" id="modal-elapsed-${scale.id}-m" value="${elapsedMinutes}" min="0" max="59" placeholder="MM" style="width: 55px;"> m
+                  <input type="number" id="modal-elapsed-${scale.id}-s" value="${elapsedRemainderSeconds}" min="0" max="59" placeholder="SS" style="width: 55px;"> s
+                </div>
               </div>
             </div>
           `;
@@ -1127,13 +1139,14 @@ async function editTask(id) {
       Object.values(state.timeScales).forEach(scale => {
         const targetSessions = parseInt(document.getElementById(`modal-target-${scale.id}`).value) || 0;
         const completedSessions = parseInt(document.getElementById(`modal-completed-${scale.id}`).value) || 0;
+        const elapsedHours = parseInt(document.getElementById(`modal-elapsed-${scale.id}-h`).value) || 0;
+        const elapsedMinutes = parseInt(document.getElementById(`modal-elapsed-${scale.id}-m`).value) || 0;
+        const elapsedSeconds = parseInt(document.getElementById(`modal-elapsed-${scale.id}-s`).value) || 0;
 
         task.times[scale.id].targetSessions = targetSessions;
         task.times[scale.id].sessions = completedSessions;
+        task.times[scale.id].elapsed = (elapsedHours * 3600) + (elapsedMinutes * 60) + elapsedSeconds;
         task.times[scale.id].goal = targetSessions * task.sessionDuration;
-        
-        let targetElapsed = completedSessions * task.sessionDuration;
-        if (!task.running) task.times[scale.id].elapsed = targetElapsed;
       });
 
     } else {
@@ -1221,6 +1234,33 @@ function deleteSubtask(taskId, subtaskId) {
   Save(true); RenderTasks();
 }
 
+function getHabitProgress(task, scaleId) {
+  const time = task.times[scaleId];
+  const sessionDuration = Number(task.sessionDuration) || 0;
+  const completedSessions = Number(time.sessions) || 0;
+  const targetSessions = Number(time.targetSessions) || 0;
+  const elapsed = Number(time.elapsed) || 0;
+  const minimumElapsed = completedSessions * sessionDuration;
+  const nextSessionLimit = Math.max(0, (completedSessions + 1) * sessionDuration - 1);
+  const progressElapsed = Math.max(minimumElapsed, Math.min(elapsed, nextSessionLimit));
+  const progressGoal = targetSessions * sessionDuration;
+
+  return progressGoal > 0 ? Math.min(100, (progressElapsed / progressGoal) * 100) : 0;
+}
+
+function getProgressGoal(task, scaleId) {
+  const time = task.times[scaleId];
+  return task.isHabit
+    ? (Number(time?.targetSessions) || 0) * (Number(task.sessionDuration) || 0)
+    : Number(time?.goal) || 0;
+}
+
+function getProgressElapsed(task, scaleId) {
+  const time = task.times[scaleId];
+  const goal = getProgressGoal(task, scaleId);
+  return Math.round(task.isHabit ? (getHabitProgress(task, scaleId) / 100) * goal : Number(time?.elapsed) || 0);
+}
+
 function RenderTasks() {
   const container = document.getElementById("root-tasks");
   let firstRender = container.innerHTML == '';
@@ -1255,8 +1295,12 @@ function RenderTasks() {
               </div>
               <div class="task-progress-list">
                 ${Object.values(state.timeScales).map((scale)=>{
-                  if (!task.times[scale.id] || task.times[scale.id].goal <= 0) return "";
-                  const progress = !firstRender ? (task.times[scale.id].elapsed / task.times[scale.id].goal) * 100 : 0;
+                  if (!task.times[scale.id] || getProgressGoal(task, scale.id) <= 0) return "";
+                  const progress = !firstRender
+                    ? task.isHabit
+                      ? getHabitProgress(task, scale.id)
+                      : (task.times[scale.id].elapsed / task.times[scale.id].goal) * 100
+                    : 0;
                   
                   let labelMiddle = `${progress.toFixed(1)}%`;
                   let labelRight = `${new Date(task.times[scale.id].elapsed * 1000).toISOString().substring(11, 19)} / ${new Date(task.times[scale.id].goal * 1000).toISOString().substring(11, 19)}`;
@@ -1307,7 +1351,13 @@ function UpdateTasksRender() {
       let scale = state.timeScales[scaleId];
       if (!scale || !task.times[scale.id]) return;
 
-      const progress = task.times[scale.id].goal > 0 ? (task.times[scale.id].elapsed / task.times[scale.id].goal) * 100 : 0;
+      let progress;
+      if (task.isHabit) {
+        progress = getHabitProgress(task, scale.id);
+      }
+      else{
+        progress= task.times[scale.id].goal > 0 ? (task.times[scale.id].elapsed / task.times[scale.id].goal) * 100 : 0;
+      }
       let metaSpans = row.querySelectorAll(".task-progress-meta span");
       if (metaSpans.length >= 3) {
         if (task.isHabit) {
@@ -1513,8 +1563,8 @@ function getRequiredWorkByDeadlineMs(targetEndMs) {
     let maxTaskRequiredForDeadlineMs = 0;
     Object.values(state.timeScales).forEach(scale => {
       const scaleEndMs = new Date(scale.start).getTime() + (scale.duration * 24 * 60 * 60 * 1000);
-      const goal = Number(task.times[scale.id]?.goal) || 0;
-      const elapsed = Number(task.times[scale.id]?.elapsed) || 0;
+      const goal = getProgressGoal(task, scale.id);
+      const elapsed = getProgressElapsed(task, scale.id);
       const remainingTaskMs = Math.max(0, (goal - elapsed) * 1000);
 
       if (remainingTaskMs > 0) {
@@ -1563,8 +1613,11 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
     if (!scale) return;
 
     const totals = Object.values(state.tasks).reduce((acc, task) => {
-      acc.elapsed += Math.min(Number(task.times[scale.id]?.elapsed) || 0, Number(task.times[scale.id]?.goal) || 0);
-      acc.goal += Number(task.times[scale.id]?.goal) || 0;
+      const time = task.times[scale.id];
+      const goal = getProgressGoal(task, scale.id);
+      const elapsed = getProgressElapsed(task, scale.id);
+      acc.elapsed += Math.min(elapsed, goal);
+      acc.goal += goal;
       return acc;
     }, { elapsed: 0, goal: 0 });
 
@@ -1593,8 +1646,8 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
     const totalTaskRequiredForDeadlineMs = getRequiredWorkByDeadlineMs(scaleEndMs);
     const currentFreeTimeMs = workableRemainingMs - totalTaskRequiredForDeadlineMs;
     const rawElapsedMs = Object.values(state.tasks).reduce((sum, task) => {
-      const elapsed = Number(task.times[scale.id]?.elapsed) || 0;
-      const goal = Number(task.times[scale.id]?.goal) || 0;
+    const elapsed = getProgressElapsed(task, scale.id);
+      const goal = getProgressGoal(task, scale.id);
       return sum + (Math.min(elapsed, goal) * 1000);
     }, 0);
     const freeTimeUsedMs = Math.max(0, timeUsed - rawElapsedMs);
@@ -1616,8 +1669,10 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
 
       switch (label) {
         case "Tasks":
+          const displayedElapsed = Math.floor(totals.elapsed);
+          const displayedRemaining = Math.max(0, totals.goal - displayedElapsed);
           meta_info.children[1].textContent = `${taskPercentage.toFixed(1)}%`;
-          meta_info.children[2].textContent = `${new Date(totals.elapsed * 1000).toISOString().substring(11, 19)} / ${new Date(totals.goal * 1000).toISOString().substring(11, 19)} (${new Date(Math.max(0, totals.goal - totals.elapsed) * 1000).toISOString().substring(11, 19)} left)`;
+          meta_info.children[2].textContent = `${new Date(displayedElapsed * 1000).toISOString().substring(11, 19)} / ${new Date(totals.goal * 1000).toISOString().substring(11, 19)} (${new Date(displayedRemaining * 1000).toISOString().substring(11, 19)} left)`;
           progressBarFill.style.left = "0%";
           progressBarFill.style.width = `${Math.min(100, taskPercentage)}%`;
           progressBarFill.style.backgroundColor = "";
@@ -1865,9 +1920,9 @@ function updateCurrentTimeLine() {
       );
       const isCurrentCycle = nowMs >= cycleStartMs && nowMs < cycleEndMs;
       const isCycleDone = Object.values(state.tasks).every(task => {
-        const goal = Number(task.times[scale.id]?.goal) || 0;
+        const goal = getProgressGoal(task, scale.id);
         const elapsed = isCurrentCycle
-          ? Number(task.times[scale.id]?.elapsed) || 0
+          ? getProgressElapsed(task, scale.id)
           : Number((cycleStats?.tasks || []).find(item => item.id === task.id)?.elapsed) || 0;
         return elapsed >= goal;
       });
@@ -1878,10 +1933,10 @@ function updateCurrentTimeLine() {
 
       Object.values(state.tasks).forEach(task => {
         let requiredForTaskMs = 0;
-        const cycleGoal = Number(task.times[scale.id]?.goal) || 0;
+        const cycleGoal = getProgressGoal(task, scale.id);
         let cycleElapsed = 0;
         if (isCurrentCycle) {
-          cycleElapsed = Number(task.times[scale.id]?.elapsed) || 0;
+          cycleElapsed = getProgressElapsed(task, scale.id);
         } else if (cycleStats) {
           const statTask = (cycleStats.tasks || []).find(item => item.id === task.id);
           cycleElapsed = Number(statTask?.elapsed) || 0;
@@ -1898,8 +1953,8 @@ function updateCurrentTimeLine() {
 
           const otherCycleIndex = Math.max(0, Math.floor((cycleEndMs - otherScaleStartMs - 1) / otherCycleDurationMs));
           const otherCycleEndMs = otherScaleStartMs + (otherCycleIndex + 1) * otherCycleDurationMs;
-          const otherGoal = Number(task.times[otherScale.id]?.goal) || 0;
-          const otherElapsed = Number(task.times[otherScale.id]?.elapsed) || 0;
+          const otherGoal = getProgressGoal(task, otherScale.id);
+          const otherElapsed = getProgressElapsed(task, otherScale.id);
           const otherRemainingMs = Math.max(0, (otherGoal - otherElapsed) * 1000);
 
           const requiredByOtherScaleMs = otherCycleEndMs <= cycleEndMs
@@ -2231,9 +2286,7 @@ function checkTimeScaleDone() {
       const runningTask = Object.values(state.tasks).find(task => task.running);
       const getRunningTaskElapsed = (task, cycleStartMs, cycleEndMs, isFirstCycle) => {
         if (task.isHabit) {
-          return isFirstCycle
-            ? (Number(task.times[scale.id]?.sessions) || 0) * (Number(task.sessionDuration) || 0)
-            : 0;
+          return isFirstCycle ? getProgressElapsed(task, scale.id) : 0;
         }
 
         if (task !== runningTask || !startTime) {
@@ -2259,7 +2312,7 @@ function checkTimeScaleDone() {
         const totals = Object.values(state.tasks).reduce((acc, task) => {
           const elapsed = getRunningTaskElapsed(task, scaleStartMs, cycleEndMs, isFirstMissedCycle);
           acc.elapsed += elapsed;
-          acc.goal += Number(task.times[scale.id]?.goal) || 0;
+          acc.goal += getProgressGoal(task, scale.id);
           return acc;
         }, { elapsed: 0, goal: 0 });
 
@@ -2285,8 +2338,11 @@ function checkTimeScaleDone() {
             return { 
               id: task.id, 
               name: task.name, 
-              elapsed,
-              goal: task.times[scale.id]?.goal || 0 
+              isHabit: task.isHabit,
+              sessions: task.times[scale.id]?.sessions || 0,
+              targetSessions: task.times[scale.id]?.targetSessions || 0,
+              elapsed: Math.round(elapsed),
+              goal: Math.round(task.times[scale.id]?.goal || 0)
             }
           })
         };
@@ -2437,39 +2493,50 @@ function openTimeScaleStatistics(scaleId) {
         return { 
           id: task.id, 
           name: task.name, 
-          elapsed: task.times[scaleId]?.elapsed || 0, 
-          goal: task.times[scaleId]?.goal || 0 
+          isHabit: task.isHabit,
+          sessions: task.times[scaleId]?.sessions || 0, 
+          targetSessions: task.times[scaleId]?.targetSessions || 0,
+          elapsed: Math.round(getProgressElapsed(task, scaleId)), 
+          rawElapsed: Math.round(Number(task.times[scaleId]?.elapsed) || 0),
+          goal: Math.round(task.times[scaleId]?.goal || 0) 
         };
       })
     });
   }
 
   const formatStatDuration = seconds => formatDuration(Math.max(0, Number(seconds) || 0) * 1000);
+  const formatSessions = val => Number.isInteger(Number(val)) ? val : Number(val).toFixed(1);
   const escapeStatHtml = value => String(value ?? '').replace(/[&<>'"]/g, character => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
   }[character]));
-  const getStatWork = stat => (stat.tasks || []).reduce((total, task) => total + (Number(task.elapsed) || 0), 0);
+  
+  const getStatWork = stat => (stat.tasks || []).reduce((total, task) => total + (task.rawElapsed !== undefined ? Number(task.rawElapsed) : Number(task.elapsed) || 0), 0);
+  
   const now = Date.now();
   const getWorkSince = days => scaleStats
     .filter(stat => new Date(stat.start).getTime() >= now - days * 24 * 60 * 60 * 1000)
     .reduce((total, stat) => total + getStatWork(stat), 0);
+    
   const taskTotals = new Map();
 
   scaleStats.forEach(stat => {
     (stat.tasks || []).forEach(task => {
       const taskId = task.id || task.name;
-      if (!taskTotals.has(taskId)) taskTotals.set(taskId, { id: taskId, name: task.name || 'Unnamed task', total: 0, cycles: 0, history: [] });
+      // Track isHabit so we know whether to render the sessions chart
+      if (!taskTotals.has(taskId)) taskTotals.set(taskId, { id: taskId, name: task.name || 'Unnamed task', isHabit: task.isHabit, total: 0, cycles: 0, history: [] });
       const aggregate = taskTotals.get(taskId);
-      const elapsed = Number(task.elapsed) || 0;
+      const elapsed = task.rawElapsed !== undefined ? Number(task.rawElapsed) : Number(task.elapsed) || 0;
+      const sessions = Number(task.sessions) || 0;
+      
       aggregate.total += elapsed;
       aggregate.cycles++;
-      aggregate.history.push({ start: stat.start, elapsed });
+      aggregate.history.push({ start: stat.start, elapsed, sessions });
     });
   });
 
   const taskRows = [...taskTotals.values()].sort((a, b) => b.total - a.total);
   const highestStreak = scaleStats.reduce((highest, stat) => Math.max(highest, stat.historicalStreak || 0), 0);
-  const totalWorkHistory = scaleStats.map(stat => ({ start: stat.start, elapsed: getStatWork(stat) }));
+  const totalWorkHistory = scaleStats.map(stat => ({ start: stat.start, elapsed: getStatWork(stat), sessions: 0 }));
 
   let runningStreak = 0;
   scaleStats.forEach(stat => {
@@ -2556,7 +2623,7 @@ function openTimeScaleStatistics(scaleId) {
         `).join('') : '<div style="color: #666; padding: 8px 0;">No task time recorded yet.</div>'}
       </div>
       <div id="task-statistics-detail" style="display: none; border-top: 1px solid #eee; padding-top: 10px;"></div>
-      <div id="modal-statistics-container" style="max-height: 60vh; overflow-y: auto; display: grid; grid-template-columns: repeat(${STATS_PER_ROW}, 1fr); gap: 5px; padding: 5px;">
+      <div id="modal-statistics-container" style="max-height: 60vh; overflow-y: auto; display: grid; grid-template-columns: repeat(${STATS_PER_ROW}, 1fr); gap: 5px; padding: 5px; margin-top: 10px;">
         ${
           scaleStats.map((stat, index)=>{
             let totals = (stat.tasks || []).reduce((acc, task) => {
@@ -2568,7 +2635,6 @@ function openTimeScaleStatistics(scaleId) {
             let percentage = totals.goal > 0 ? (totals.elapsed / totals.goal) * 100 : 100;
             let clampedPercentage = Math.min(100, Math.max(0, percentage));
             let hue = (clampedPercentage / 100) * 120;
-            
             
             let borderStyle = stat.isPreview ? "dashed" : "solid";
             let borderColor = percentage >= 100 ? "hsl(120, 100%, 45%)" : "hsl(0, 100%, 45%)";
@@ -2637,25 +2703,54 @@ function openTimeScaleStatistics(scaleId) {
     
     const squares = document.querySelectorAll(".heatmap-square.time-scale");
 
-    const renderHistoryChart = (title, history) => {
+    const renderHistoryChart = (title, history, isHabit = false) => {
       const detail = document.getElementById('task-statistics-detail');
       if (!detail || !history.length) return;
-      const maxElapsed = Math.max(...history.map(item => item.elapsed), 1);
-      const chartWidth = 360;
-      const chartHeight = 82;
-      const chartPadding = { top: 10, right: 12, bottom: 20, left: 34 };
-      const chartInnerWidth = chartWidth - chartPadding.left - chartPadding.right;
-      const chartInnerHeight = chartHeight - chartPadding.top - chartPadding.bottom;
-      const chartPoints = history.map((item, index) => {
-        const x = chartPadding.left + (history.length === 1 ? chartInnerWidth / 2 : index * chartInnerWidth / (history.length - 1));
-        const y = chartPadding.top + chartInnerHeight - (item.elapsed / maxElapsed) * chartInnerHeight;
-        return { ...item, x, y, date: new Date(item.start).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) };
-      });
-      const points = chartPoints.map(point => `${point.x},${point.y}`).join(' ');
       detail.style.display = 'block';
-      const averageElapsed = history.reduce((total, item) => total + item.elapsed, 0) / history.length;
-      const averageY = chartPadding.top + chartInnerHeight - (averageElapsed / maxElapsed) * chartInnerHeight;
-      detail.innerHTML = `<strong>${escapeStatHtml(title)} by cycle</strong><svg class="task-history-chart" viewBox="0 0 ${chartWidth} ${chartHeight}" role="img" aria-label="${escapeStatHtml(title)} work per cycle"><line x1="${chartPadding.left}" y1="${chartPadding.top}" x2="${chartPadding.left}" y2="${chartPadding.top + chartInnerHeight}" stroke="#aaa" /><line x1="${chartPadding.left}" y1="${averageY}" x2="${chartWidth - chartPadding.right}" y2="${averageY}" stroke="#eee" stroke-dasharray="2 2" /><line x1="${chartPadding.left}" y1="${chartPadding.top + chartInnerHeight}" x2="${chartWidth - chartPadding.right}" y2="${chartPadding.top + chartInnerHeight}" stroke="#ddd" /><text x="${chartPadding.left - 4}" y="${chartPadding.top + 3}" text-anchor="end">${formatStatDuration(maxElapsed)}</text><text x="${chartPadding.left - 4}" y="${averageY + 3}" text-anchor="end">${formatStatDuration(averageElapsed)}</text><text x="${chartPadding.left - 4}" y="${chartPadding.top + chartInnerHeight + 3}" text-anchor="end">0</text><polyline points="${points}" />${chartPoints.map(point => `<circle cx="${point.x}" cy="${point.y}" r="3"><title>${point.date}: ${formatStatDuration(point.elapsed)}</title></circle>`).join('')}<text x="${chartPadding.left}" y="${chartHeight - 4}">${chartPoints[0].date}</text><text x="${chartWidth - chartPadding.right}" y="${chartHeight - 4}" text-anchor="end">${chartPoints[chartPoints.length - 1].date}</text></svg>`;
+
+      const buildChartSvg = (chartTitle, dataKey, formatFn, fallbackMax) => {
+        const maxVal = Math.max(...history.map(item => item[dataKey]), fallbackMax);
+        const averageVal = history.reduce((total, item) => total + item[dataKey], 0) / history.length;
+        const chartWidth = 360;
+        const chartHeight = 82;
+        const chartPadding = { top: 10, right: 12, bottom: 20, left: 34 };
+        const chartInnerWidth = chartWidth - chartPadding.left - chartPadding.right;
+        const chartInnerHeight = chartHeight - chartPadding.top - chartPadding.bottom;
+        const chartPoints = history.map((item, index) => {
+          const x = chartPadding.left + (history.length === 1 ? chartInnerWidth / 2 : index * chartInnerWidth / (history.length - 1));
+          const y = chartPadding.top + chartInnerHeight - (item[dataKey] / maxVal) * chartInnerHeight;
+          return { ...item, x, y, date: new Date(item.start).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) };
+        });
+        
+        const points = chartPoints.map(point => `${point.x},${point.y}`).join(' ');
+        const averageY = chartPadding.top + chartInnerHeight - (averageVal / maxVal) * chartInnerHeight;
+
+        return `
+          <div style="margin-bottom: 12px;">
+            <strong>${escapeStatHtml(chartTitle)}</strong>
+            <svg class="task-history-chart" viewBox="0 0 ${chartWidth} ${chartHeight}" role="img" aria-label="${escapeStatHtml(chartTitle)}">
+              <line x1="${chartPadding.left}" y1="${chartPadding.top}" x2="${chartPadding.left}" y2="${chartPadding.top + chartInnerHeight}" stroke="#aaa" />
+              <line x1="${chartPadding.left}" y1="${averageY}" x2="${chartWidth - chartPadding.right}" y2="${averageY}" stroke="#eee" stroke-dasharray="2 2" />
+              <line x1="${chartPadding.left}" y1="${chartPadding.top + chartInnerHeight}" x2="${chartWidth - chartPadding.right}" y2="${chartPadding.top + chartInnerHeight}" stroke="#ddd" />
+              <text x="${chartPadding.left - 4}" y="${chartPadding.top + 3}" text-anchor="end">${formatFn(maxVal)}</text>
+              <text x="${chartPadding.left - 4}" y="${averageY + 3}" text-anchor="end">${formatFn(averageVal)}</text>
+              <text x="${chartPadding.left - 4}" y="${chartPadding.top + chartInnerHeight + 3}" text-anchor="end">0</text>
+              <polyline points="${points}" />
+              ${chartPoints.map(point => `<circle cx="${point.x}" cy="${point.y}" r="3"><title>${point.date}: ${formatFn(point[dataKey])}</title></circle>`).join('')}
+              <text x="${chartPadding.left}" y="${chartHeight - 4}">${chartPoints[0].date}</text>
+              <text x="${chartWidth - chartPadding.right}" y="${chartHeight - 4}" text-anchor="end">${chartPoints[chartPoints.length - 1].date}</text>
+            </svg>
+          </div>
+        `;
+      };
+
+      let chartsHtml = buildChartSvg(`${title} (Time) by cycle`, 'elapsed', formatStatDuration, 1);
+      
+      if (isHabit) {
+        chartsHtml += buildChartSvg(`${title} (Sessions) by cycle`, 'sessions', formatSessions, 1);
+      }
+      
+      detail.innerHTML = chartsHtml;
     };
 
     document.querySelectorAll('.task-stat-row').forEach(row => row.addEventListener('click', () => {
@@ -2664,13 +2759,13 @@ function openTimeScaleStatistics(scaleId) {
       document.querySelectorAll('.task-stat-row').forEach(item => item.classList.remove('selected'));
       document.getElementById('total-work-stat')?.classList.remove('selected');
       row.classList.add('selected');
-      renderHistoryChart(task.name, task.history);
+      renderHistoryChart(task.name, task.history, task.isHabit);
     }));
 
     document.getElementById('total-work-stat')?.addEventListener('click', event => {
       document.querySelectorAll('.task-stat-row').forEach(item => item.classList.remove('selected'));
       event.currentTarget.classList.add('selected');
-      renderHistoryChart('Total work', totalWorkHistory);
+      renderHistoryChart('Total work', totalWorkHistory, false);
     });
     
     squares.forEach(square => {
@@ -2695,18 +2790,27 @@ function openTimeScaleStatistics(scaleId) {
         const endStr = new Date(new Date(stat.start).getTime() + (stat.duration-1) * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB');
         const dateRange = stat.duration === 1 ? startStr : `${startStr} - ${endStr}`;
 
-        const tasksHtml = (stat.tasks || []).sort((a, b) => b.elapsed - a.elapsed).map(task => {
+        const tasksHtml = (stat.tasks || []).sort((a, b) => (b.rawElapsed !== undefined ? b.rawElapsed : b.elapsed) - (a.rawElapsed !== undefined ? a.rawElapsed : a.elapsed)).map(task => {
           const taskGoal = Number(task.goal) || 0;
           if (taskGoal <= 0) return "";
-          const taskElapsed = Number(task.elapsed) || 0;
-          const taskProgress = (taskElapsed / taskGoal) * 100;
+          
+          const taskElapsed = task.rawElapsed !== undefined ? Number(task.rawElapsed) : Number(task.elapsed) || 0;
+          const taskProgressElapsed = Number(task.elapsed) || 0; 
+          const taskProgress = (taskProgressElapsed / taskGoal) * 100;
           const taskHue = (Math.min(100, taskProgress) / 100) * 120;
+          
+          let statsText = '';
+          if (task.isHabit) {
+            statsText = `${task.sessions || 0} / ${task.targetSessions || 0} (${formatDuration(taskElapsed * 1000)})`;
+          } else {
+            statsText = `${formatDuration(taskElapsed * 1000)} / ${formatDuration(taskGoal * 1000)}`;
+          }
           
           return `
             <div class="tt-task-row">
               <span style="font-weight: 500; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 140px;">${task.name}</span>
               <span style="color: #666;">
-                ${formatDuration(taskElapsed * 1000)} / ${formatDuration(taskGoal * 1000)} 
+                ${statsText} 
                 <strong style="color:#333; margin-left: 5px;">${taskProgress.toFixed(1)}%</strong>
               </span>
             </div>
