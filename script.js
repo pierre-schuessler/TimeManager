@@ -2305,6 +2305,22 @@ function checkTimeScaleDone() {
 
         return (baselineBelongsToCycle ? sessionBaseline : 0) + sessionWorked;
       };
+      const getRunningTaskRawElapsed = (task, cycleStartMs, cycleEndMs, isFirstCycle) => {
+        if (task !== runningTask || !startTime) {
+          return isFirstCycle ? Number(task.times[scale.id]?.elapsed) || 0 : 0;
+        }
+        if (!isFirstCycle) return 0;
+
+        const sessionStartMs = Number(startTime);
+        const sessionBaseline = Number(startCounters?.[scale.id]?.elapsed) || 0;
+        const baselineBelongsToCycle = sessionStartMs < cycleEndMs;
+        const sessionWorked = Math.max(
+          0,
+          Math.min(nowMs, cycleEndMs) - Math.max(sessionStartMs, cycleStartMs)
+        ) / 1000;
+
+        return (baselineBelongsToCycle ? sessionBaseline : 0) + sessionWorked;
+      };
       let completedRunningTaskElapsed = 0;
 
       while (scaleStartMs + scaleDurationMs <= nowMs) {
@@ -2335,6 +2351,9 @@ function checkTimeScaleDone() {
           start: new Date(scaleStartMs).toISOString(),
           tasks: Object.values(state.tasks).map((task) => {
             const elapsed = getRunningTaskElapsed(task, scaleStartMs, cycleEndMs, isFirstMissedCycle);
+            
+            const rawElapsed = getRunningTaskRawElapsed(task, scaleStartMs, cycleEndMs, isFirstMissedCycle); 
+
             return { 
               id: task.id, 
               name: task.name, 
@@ -2342,6 +2361,7 @@ function checkTimeScaleDone() {
               sessions: task.times[scale.id]?.sessions || 0,
               targetSessions: task.times[scale.id]?.targetSessions || 0,
               elapsed: Math.round(elapsed),
+              rawElapsed: Math.round(rawElapsed),
               goal: Math.round(task.times[scale.id]?.goal || 0)
             }
           })
