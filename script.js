@@ -2729,9 +2729,10 @@ function openTimeScaleStatistics(scaleId) {
       if (!detail || !history.length) return;
       detail.style.display = 'block';
 
-      const buildChartSvg = (chartTitle, dataKey, formatFn, fallbackMax, chartHistory = history) => {
-        const maxVal = Math.max(...chartHistory.map(item => item[dataKey]), fallbackMax);
-        const averageVal = chartHistory.reduce((total, item) => total + item[dataKey], 0) / chartHistory.length;
+      const buildChartSvg = (chartTitle, dataKey, formatFn, fallbackMax, chartHistory = history, pointFilter = () => true) => {
+        const visibleHistory = chartHistory.filter(pointFilter);
+        const maxVal = Math.max(...visibleHistory.map(item => item[dataKey]), fallbackMax);
+        const averageVal = visibleHistory.reduce((total, item) => total + item[dataKey], 0) / visibleHistory.length;
         const chartWidth = 360;
         const chartHeight = 82;
         const chartPadding = { top: 10, right: 12, bottom: 20, left: 34 };
@@ -2740,10 +2741,23 @@ function openTimeScaleStatistics(scaleId) {
         const chartPoints = chartHistory.map((item, index) => {
           const x = chartPadding.left + (chartHistory.length === 1 ? chartInnerWidth / 2 : index * chartInnerWidth / (chartHistory.length - 1));
           const y = chartPadding.top + chartInnerHeight - (item[dataKey] / maxVal) * chartInnerHeight;
-          return { ...item, x, y, date: new Date(item.start).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) };
+          return { ...item, x, y, visible: pointFilter(item), date: new Date(item.start).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) };
         });
         
-        const points = chartPoints.map(point => `${point.x},${point.y}`).join(' ');
+        const pointSegments = [];
+        chartPoints.forEach(point => {
+          if (!point.visible) {
+            pointSegments.push([]);
+          } else if (!pointSegments.length) {
+            pointSegments.push([point]);
+          } else {
+            pointSegments[pointSegments.length - 1].push(point);
+          }
+        });
+        const lines = pointSegments
+          .filter(segment => segment.length > 1)
+          .map(segment => `<polyline points="${segment.map(point => `${point.x},${point.y}`).join(' ')}" />`)
+          .join('');
         const averageY = chartPadding.top + chartInnerHeight - (averageVal / maxVal) * chartInnerHeight;
 
         return `
@@ -2756,8 +2770,8 @@ function openTimeScaleStatistics(scaleId) {
               <text x="${chartPadding.left - 4}" y="${chartPadding.top + 3}" text-anchor="end">${formatFn(maxVal)}</text>
               <text x="${chartPadding.left - 4}" y="${averageY + 3}" text-anchor="end">${formatFn(averageVal)}</text>
               <text x="${chartPadding.left - 4}" y="${chartPadding.top + chartInnerHeight + 3}" text-anchor="end">0</text>
-              <polyline points="${points}" />
-              ${chartPoints.map(point => `<circle cx="${point.x}" cy="${point.y}" r="3"><title>${point.date}: ${formatFn(point[dataKey])}</title></circle>`).join('')}
+              ${lines}
+              ${chartPoints.filter(point => point.visible).map(point => `<circle cx="${point.x}" cy="${point.y}" r="3"><title>${point.date}: ${formatFn(point[dataKey])}</title></circle>`).join('')}
               <text x="${chartPadding.left}" y="${chartHeight - 4}">${chartPoints[0].date}</text>
               <text x="${chartWidth - chartPadding.right}" y="${chartHeight - 4}" text-anchor="end">${chartPoints[chartPoints.length - 1].date}</text>
             </svg>
@@ -2769,7 +2783,7 @@ function openTimeScaleStatistics(scaleId) {
       
       const habitHistory = history.filter(item => item.isHabit);
       if (isHabit && habitHistory.length > 0) {
-        chartsHtml += buildChartSvg(`${title} (Sessions) by cycle`, 'sessions', formatSessions, 1, habitHistory);
+        chartsHtml += buildChartSvg(`${title} (Sessions) by cycle`, 'sessions', formatSessions, 1, history, item => item.isHabit);
       }
       
       detail.innerHTML = chartsHtml;
