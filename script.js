@@ -2551,7 +2551,7 @@ function openTimeScaleStatistics(scaleId) {
       
       aggregate.total += elapsed;
       aggregate.cycles++;
-      aggregate.history.push({ start: stat.start, elapsed, sessions });
+      aggregate.history.push({ start: stat.start, elapsed, sessions, isHabit: !!task.isHabit });
     });
   });
 
@@ -2729,16 +2729,16 @@ function openTimeScaleStatistics(scaleId) {
       if (!detail || !history.length) return;
       detail.style.display = 'block';
 
-      const buildChartSvg = (chartTitle, dataKey, formatFn, fallbackMax) => {
-        const maxVal = Math.max(...history.map(item => item[dataKey]), fallbackMax);
-        const averageVal = history.reduce((total, item) => total + item[dataKey], 0) / history.length;
+      const buildChartSvg = (chartTitle, dataKey, formatFn, fallbackMax, chartHistory = history) => {
+        const maxVal = Math.max(...chartHistory.map(item => item[dataKey]), fallbackMax);
+        const averageVal = chartHistory.reduce((total, item) => total + item[dataKey], 0) / chartHistory.length;
         const chartWidth = 360;
         const chartHeight = 82;
         const chartPadding = { top: 10, right: 12, bottom: 20, left: 34 };
         const chartInnerWidth = chartWidth - chartPadding.left - chartPadding.right;
         const chartInnerHeight = chartHeight - chartPadding.top - chartPadding.bottom;
-        const chartPoints = history.map((item, index) => {
-          const x = chartPadding.left + (history.length === 1 ? chartInnerWidth / 2 : index * chartInnerWidth / (history.length - 1));
+        const chartPoints = chartHistory.map((item, index) => {
+          const x = chartPadding.left + (chartHistory.length === 1 ? chartInnerWidth / 2 : index * chartInnerWidth / (chartHistory.length - 1));
           const y = chartPadding.top + chartInnerHeight - (item[dataKey] / maxVal) * chartInnerHeight;
           return { ...item, x, y, date: new Date(item.start).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) };
         });
@@ -2767,8 +2767,9 @@ function openTimeScaleStatistics(scaleId) {
 
       let chartsHtml = buildChartSvg(`${title} (Time) by cycle`, 'elapsed', formatStatDuration, 1);
       
-      if (isHabit) {
-        chartsHtml += buildChartSvg(`${title} (Sessions) by cycle`, 'sessions', formatSessions, 1);
+      const habitHistory = history.filter(item => item.isHabit);
+      if (isHabit && habitHistory.length > 0) {
+        chartsHtml += buildChartSvg(`${title} (Sessions) by cycle`, 'sessions', formatSessions, 1, habitHistory);
       }
       
       detail.innerHTML = chartsHtml;
