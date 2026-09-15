@@ -2545,6 +2545,7 @@ function openTimeScaleStatistics(scaleId) {
       // Track isHabit so we know whether to render the sessions chart
       if (!taskTotals.has(taskId)) taskTotals.set(taskId, { id: taskId, name: task.name || 'Unnamed task', isHabit: task.isHabit, total: 0, cycles: 0, history: [] });
       const aggregate = taskTotals.get(taskId);
+      aggregate.isHabit = aggregate.isHabit || task.isHabit;
       const elapsed = task.rawElapsed !== undefined ? Number(task.rawElapsed) : Number(task.elapsed) || 0;
       const sessions = Number(task.sessions) || 0;
       
