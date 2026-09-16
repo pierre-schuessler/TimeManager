@@ -1479,7 +1479,17 @@ function RenderTimeScales(agendaData = state.agenda) {
       <div class="time-scale" style="text-align: center; cursor: pointer;" onclick="addTimeScale()">+ New Time Scale</div>
       ${Object.values(state.timeScales).map((scale)=>{
         const streakCount = getTimeScaleStreak(scale.id);
-        const streakClass = streakCount > 0 ? "active" : "inactive";
+        // if the current cycle of that time scale is 100% completed, we add a "completed" class to the streak badge
+        const totals = Object.values(state.tasks).reduce((acc, task) => {
+          acc.elapsed += Math.min(getProgressElapsed(task, scale.id), Number(task.times[scale.id]?.goal) || 0);
+          acc.goal += Number(task.times[scale.id]?.goal) || 0;
+          return acc;
+        }, { elapsed: 0, goal: 0 });
+        const isCompleted = totals.goal > 0 && totals.elapsed >= totals.goal;
+        let streakClass = streakCount > 0 ? "active" : "inactive";
+        if (isCompleted) {
+          streakClass += " completed";
+        }
         return `
           <div class="time-scale">
             <div class="time-scale-header" style="display: flex; align-items: center; gap: 8px;">
@@ -1714,6 +1724,18 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
       streakBadge.classList.toggle("inactive", streakCount === 0);
       const streakNumber = streakBadge.querySelector(".streak-number");
       if (streakNumber) streakNumber.textContent = streakCount;
+      const totals = Object.values(state.tasks).reduce((acc, task) => {
+        const time = task.times[scale.id];
+        const goal = getProgressGoal(task, scale.id);
+        const elapsed = getProgressElapsed(task, scale.id);
+        acc.elapsed += Math.min(elapsed, goal);
+        acc.goal += goal;
+        return acc;
+      }, { elapsed: 0, goal: 0 });
+      const isCompleted = totals.goal > 0 && totals.elapsed >= totals.goal;
+      console.log(isCompleted, totals.elapsed, totals.goal);
+      streakBadge.classList.toggle("completed", isCompleted);
+      console.log(streakBadge.classList);
     }
   });
 }
