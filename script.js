@@ -783,6 +783,8 @@ function streakIncreaseAnimation(scaleId) {
   
   void overlay.offsetWidth; 
   overlay.classList.add('active');
+  
+
 
   const ringFill = ringContainer.querySelector('.ring-fill');
   const badge = ringContainer.querySelector('.streak-anim-badge');
@@ -795,11 +797,11 @@ function streakIncreaseAnimation(scaleId) {
   setTimeout(() => {
     numberEl.innerText = newStreak;
     badge.classList.add('streak-bump');
+    badge.classList.add('completed');
   }, 1800); 
 
   setTimeout(() => {
     overlay.classList.remove('active');
-    setTimeout(() => overlay.remove(), 400); 
   }, 5000);
 }
 
@@ -2645,7 +2647,7 @@ function openTimeScaleStatistics(scaleId) {
         @media (max-width: 520px) { .stats-summary { grid-template-columns: repeat(2, 1fr); } }
       </style>
     `;
-
+    const currentStreak = getTimeScaleStreak(scaleId);
     document.getElementById("modal-body").innerHTML = `
       ${styleBlock}
       <div class="stats-summary">
@@ -2653,7 +2655,7 @@ function openTimeScaleStatistics(scaleId) {
         <div class="stats-summary-card"><span class="stats-summary-label">Last week</span><span class="stats-summary-value">${formatStatDuration(getWorkSince(7))}</span></div>
         <div class="stats-summary-card"><span class="stats-summary-label">Last month</span><span class="stats-summary-value">${formatStatDuration(getWorkSince(30))}</span></div>
         <div class="stats-summary-card"><span class="stats-summary-label">Last year</span><span class="stats-summary-value">${formatStatDuration(getWorkSince(365))}</span></div>
-        <div class="stats-summary-card stats-streak-card" style="flex-direction: column;"><span class="stats-summary-label" style="margin: 0;">Best streak</span><div class="streak-badge active" style="transform: scale(0.52); transform-origin: center; margin: -12px 0; text-shadow: none;"><svg class="flame-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 24C17.5228 24 22 19.5228 22 14C22 8 15 2 13 0C13 0 13.5 3 12 5C10.5 7 2 9 2 15C2 19.9706 6.47715 24 12 24Z"/></svg><span class="streak-number">${highestStreak}</span></div></div>
+        <div class="stats-summary-card stats-streak-card" style="flex-direction: column;"><span class="stats-summary-label" style="margin: 0;">Best streak</span><div class="streak-badge active ${currentStreak === highestStreak ? 'highest' : ''}" style="transform: scale(0.52); transform-origin: center; margin: -12px 0; text-shadow: none;"><svg class="flame-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 24C17.5228 24 22 19.5228 22 14C22 8 15 2 13 0C13 0 13.5 3 12 5C10.5 7 2 9 2 15C2 19.9706 6.47715 24 12 24Z"/></svg><span class="streak-number">${highestStreak}</span></div></div>
       </div>
       <div style="font-weight: 700; margin: 4px 0 8px;">Work by task</div>
       <div id="task-statistics-list" style="display: grid; gap: 7px; margin-bottom: 14px;">

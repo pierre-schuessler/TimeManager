@@ -813,6 +813,14 @@ table > * {
     color: #ababab;
 }
 
+.streak-anim-badge.completed {
+    color: #4CAF50;
+    filter: drop-shadow(0px 0px 8px rgba(255, 215, 0, 0.8)) 
+            drop-shadow(0px 4px 6px rgba(255, 215, 0, 0.4));
+    transform: scale(1.15); 
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+}
+
 .streak-anim-badge.streak-anim-inactive .streak-anim-svg {
     filter: none;
 }
@@ -872,6 +880,10 @@ table > * {
 .streak-bump.streak-anim-inactive .streak-anim-svg {
     color: #ffeb3b;
     filter: drop-shadow(0 0 15px rgba(255, 152, 0, 0.5));
+}
+
+.streak-bump.completed .streak-anim-svg {
+    color: #4CAF50;
 }
 
 .streak-bump.streak-anim-inactive .streak-anim-number {
