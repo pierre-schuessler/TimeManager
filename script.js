@@ -2096,9 +2096,9 @@ function RenderAgenda() {
 }
 
 function attachAgendaSlotTooltipHandlers() {
-  const tooltip = document.getElementById("global-heatmap-tooltip") || (() => {
+  const tooltip = document.getElementById("agenda-tooltip") || (() => {
     const newTooltip = document.createElement("div");
-    newTooltip.id = "global-heatmap-tooltip";
+    newTooltip.id = "agenda-tooltip";
     newTooltip.style.position = "fixed";
     newTooltip.style.pointerEvents = "none";
     newTooltip.style.zIndex = "99999";
