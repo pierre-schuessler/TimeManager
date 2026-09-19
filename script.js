@@ -1468,6 +1468,23 @@ function getTimeScaleStreak(scaleId) {
   return streakInScales;
 }
 
+function getTimeScaleCompletion(scale) {
+  if (!scale) return 0;
+
+  const totals = Object.values(state.tasks).reduce((acc, task) => {
+    const taskTime = task.times?.[scale.id];
+    if (!taskTime) return acc;
+
+    const goal = Number(taskTime.goal) || 0;
+    acc.elapsed += Math.min(getProgressElapsed(task, scale.id), goal);
+    acc.goal += goal;
+    return acc;
+  }, { elapsed: 0, goal: 0 });
+
+  if (totals.goal <= 0) return 100;
+  return Math.min(100, (totals.elapsed / totals.goal) * 100);
+}
+
 let isEditingAgenda = false;
 let isTimeScaleDetailsVisible = false;
 
@@ -2580,7 +2597,6 @@ function openTimeScaleStatistics(scaleId) {
   });
 
   const taskRows = [...taskTotals.values()].sort((a, b) => b.total - a.total);
-  const highestStreak = scaleStats.reduce((highest, stat) => Math.max(highest, stat.historicalStreak || 0), 0);
   const totalWorkHistory = scaleStats.map(stat => ({ start: stat.start, elapsed: getStatWork(stat), sessions: 0 }));
 
   let runningStreak = 0;
@@ -2598,6 +2614,8 @@ function openTimeScaleStatistics(scaleId) {
     }
     stat.historicalStreak = runningStreak;
   });
+
+  const highestStreak = scaleStats.reduce((highest, stat) => Math.max(highest, stat.historicalStreak || 0), 0);
 
   {
     const STATS_PER_ROW = 14;
@@ -2647,7 +2665,9 @@ function openTimeScaleStatistics(scaleId) {
         @media (max-width: 520px) { .stats-summary { grid-template-columns: repeat(2, 1fr); } }
       </style>
     `;
-    const currentStreak = getTimeScaleStreak(scaleId);
+    const currentScaleCompleted = currentScale && getTimeScaleCompletion(currentScale) >= 100 ? 1 : 0;
+    const currentStreak = getTimeScaleStreak(scaleId) + currentScaleCompleted;
+
     document.getElementById("modal-body").innerHTML = `
       ${styleBlock}
       <div class="stats-summary">
