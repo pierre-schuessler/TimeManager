@@ -649,8 +649,9 @@ table > * {
 }
 
 .streak-badge.highest .flame-icon {
-    color: #ff4b3b; 
-    filter: drop-shadow(0px 3px 4px rgba(255, 75, 59, 0.5));
+    filter: 
+  drop-shadow(0px 0px 4px rgb(255, 0, 0))
+  drop-shadow(0px 0px 12px rgb(255, 0, 0));
     transition: all 0.3s ease;
 }
 .streak-badge.highest::before {
@@ -659,7 +660,7 @@ table > * {
 
 .streak-badge.highest::after {
     animation: rapid-sparkle-2 2s infinite linear;
-    animation-delay: -1s; 
+    animation-delay: -0.7s; 
 }
 
 
@@ -671,6 +672,8 @@ table > * {
     transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
 }
 
+.streak-badge.highest::before,
+.streak-badge.highest::after,
 .streak-badge.active.completed::before,
 .streak-badge.active.completed::after {
     content: '';
@@ -694,7 +697,7 @@ table > * {
 
 .streak-badge.active.completed::after {
     animation: rapid-sparkle-2 2s infinite linear;
-    animation-delay: -1s; 
+    animation-delay: -0.7s; 
 }
 
 @keyframes rapid-sparkle-1 {
