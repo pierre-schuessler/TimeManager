@@ -2870,7 +2870,7 @@ function openTimeScaleStatistics(scaleId) {
         const endStr = new Date(new Date(stat.start).getTime() + (stat.duration-1) * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB');
         const dateRange = stat.duration === 1 ? startStr : `${startStr} - ${endStr}`;
 
-        const tasksHtml = (stat.tasks || []).sort((a, b) => (b.rawElapsed !== undefined ? b.rawElapsed : b.elapsed) - (a.rawElapsed !== undefined ? a.rawElapsed : a.elapsed)).map(task => {
+        const tasksHtml = (stat.tasks || []).sort((a, b) => (b.rawElapsed / b.goal) - (a.rawElapsed / a.goal)).map(task => {
           const taskGoal = Number(task.goal) || 0;
           if (taskGoal <= 0) return "";
           
