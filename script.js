@@ -285,7 +285,6 @@ function openLogin(){
       <label>Password<span style="color:red">*</span></label>
       <input type="password" id="password-input" value="">
     </div>
-    <p>Please note that you should never try to modify any of your data on two devices at once. This includes starting to work on tasks, editing the calendar, editing or creating tasks.</p>
   `;
 
   document.getElementById("btn-submit").innerText = "Log in";
