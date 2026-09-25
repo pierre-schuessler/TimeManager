@@ -1201,7 +1201,7 @@ function createNewSubtask(taskId) {
   lastTick = performance.now();
   if (subtaskName && subtaskName.trim() !== "") {
     let subtaskId = crypto.randomUUID();
-    task.subtasks[subtaskId] = { id: subtaskId, name: subtaskName, done: false };
+    task.subtasks[subtaskId] = { id: subtaskId, name: subtaskName, done: false, deadline: null };
     Save(true); RenderTasks();
   }
 }
@@ -1228,6 +1228,43 @@ function toggleSubtask(taskId, subtaskId) {
   }
   
   RenderTasks();
+}
+
+function openEditSubtaskModal(subtaskId) {
+  let taskId = Object.keys(state.tasks).find(tid => state.tasks[tid].subtasks[subtaskId]);
+  if (!taskId) return;
+  let task = state.tasks[taskId];
+  let subtask = task.subtasks[subtaskId];
+
+  document.getElementById("modal-title").innerText = "Edit Subtask";
+  document.getElementById("modal-body").innerHTML = `
+    <div class="form-group">
+      <label>Subtask Name <span style="color:red">*</span></label>
+      <input type="text" id="modal-subtaskName" value="${subtask.name}">
+    </div>
+    <div class="form-group">
+      <label>Deadline</label>
+      <input type="date" id="modal-subtaskDeadline" value="${subtask.deadline ? new Date(subtask.deadline).toISOString().split('T')[0] : ''}">
+    </div>
+  `;
+
+  document.getElementById("btn-submit").innerText = "Save Changes";
+  document.getElementById("btn-submit").onclick = function() {
+    const newName = document.getElementById("modal-subtaskName").value;
+    const newDeadline = document.getElementById("modal-subtaskDeadline").value;
+    subtask.name = newName;
+    subtask.deadline = newDeadline ? new Date(newDeadline).toISOString() : null;
+
+    const user = auth.currentUser;
+    if (user) {
+      isSavingLocally = true;
+      update(ref(db, `users/${user.uid}/tasks/${taskId}/subtasks/${subtaskId}`), { name: subtask.name, deadline: subtask.deadline });
+      Save(false);
+    } else { Save(true); }
+    RenderTasks(); closeModal("modal");
+  }
+
+  openModal("modal");
 }
 
 function deleteSubtask(taskId, subtaskId) {
@@ -1291,6 +1328,10 @@ function RenderTasks() {
                   return `<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;" class="${classname}">
                       <input type="checkbox" ${isChecked} onclick="toggleSubtask('${task.id}', '${subtask.id}')"> 
                       <span style="font-weight: 500; ${textStyle}">${subtask.name}</span>
+                      <div style="display: flex; align-items: center; gap: 10px; margin-left: auto;">
+                          ${subtask.deadline ? `<span style="font-size: 0.8em; color: #888;">(Due: ${new Date(subtask.deadline).toLocaleDateString()})</span>` : ''}
+                          <span style="cursor: pointer;" onclick="openEditSubtaskModal('${subtask.id}')">✏️</span>
+                      </div>
                   </div>`
                 }).join("")}
               </div>
@@ -3100,3 +3141,4 @@ window.openModal = openModal;
 window.openTimeScaleStatistics = openTimeScaleStatistics; 
 window.giveUp = giveUp;
 window.toggleDetails = toggleDetails;
+window.openEditSubtaskModal = openEditSubtaskModal;
