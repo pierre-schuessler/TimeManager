@@ -1321,18 +1321,47 @@ function RenderTasks() {
               </div>
               <div class="subtask-area" style="margin: 15px 0;">
                 <div class="task" style="text-align: center; cursor: pointer; padding: 5px; font-size: 0.9em; margin-bottom: 10px;" onclick="createNewSubtask('${task.id}')">+ New subtask</div>
-                ${Object.values(task.subtasks).map((subtask)=>{
-                  let isChecked = subtask.done ? 'checked' : '';
-                  let textStyle = subtask.done ? 'text-decoration: line-through; opacity: 0.6;' : '';
-                  let classname = subtask.done ? "task subtask-done" : "task";
-                  return `<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;" class="${classname}">
-                      <input type="checkbox" ${isChecked} onclick="toggleSubtask('${task.id}', '${subtask.id}')"> 
-                      <span style="font-weight: 500; ${textStyle}">${subtask.name}</span>
-                      <div style="display: flex; align-items: center; gap: 10px; margin-left: auto;">
-                          ${subtask.deadline ? `<span style="font-size: 0.8em; color: #888;">(Due: ${new Date(subtask.deadline).toLocaleDateString()})</span>` : ''}
-                          <span style="cursor: pointer;" onclick="openEditSubtaskModal('${subtask.id}')">✏️</span>
-                      </div>
-                  </div>`
+                ${Object.values(task.subtasks).sort((a, b) => {
+                  if (!a.deadline && b.deadline) return 1;
+                  if (a.deadline && !b.deadline) return -1;
+                  if (!a.deadline || !b.deadline) // do it alphabetically
+                    return a.name.localeCompare(b.name);
+                  return new Date(a.deadline) - new Date(b.deadline);
+                }).map((subtask) => {
+                    let isChecked = subtask.done ? 'checked' : '';
+                    let textStyle = subtask.done ? 'text-decoration: line-through; opacity: 0.6;' : '';
+                    let classname = subtask.done ? "task subtask-done" : "task";
+                    
+                    let dateHtml = '';
+                    if (subtask.deadline) {
+                        const deadlineDate = new Date(subtask.deadline);
+                        const formattedDate = deadlineDate.toLocaleDateString('en-GB'); 
+                        
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        deadlineDate.setHours(0, 0, 0, 0);
+                        
+                        const diffTime = deadlineDate.getTime() - today.getTime();
+                        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+                        
+                        let relativeTime;
+                        if (diffDays === 0) relativeTime = "today";
+                        else if (diffDays === 1) relativeTime = "1 day left";
+                        else if (diffDays === -1) relativeTime = "1 day ago";
+                        else if (diffDays > 0) relativeTime = `${diffDays} days left`;
+                        else relativeTime = `${Math.abs(diffDays)} days ago`;
+                        
+                        dateHtml = `<span style="font-size: 0.8em; color: #888;">(${formattedDate}, ${relativeTime})</span>`;
+                    }
+
+                    return `<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;" class="${classname}">
+                        <input type="checkbox" ${isChecked} onclick="toggleSubtask('${task.id}', '${subtask.id}')"> 
+                        <span style="font-weight: 500; ${textStyle}">${subtask.name}</span>
+                        <div style="display: flex; align-items: center; gap: 10px; margin-left: auto;">
+                            ${dateHtml}
+                            <span style="cursor: pointer;" onclick="openEditSubtaskModal('${subtask.id}')">✏️</span>
+                        </div>
+                    </div>`
                 }).join("")}
               </div>
               <div class="task-progress-list">
