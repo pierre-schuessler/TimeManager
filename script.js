@@ -26,7 +26,6 @@ function showFirebaseUpdateWarning(type) {
 function clearFirebaseUpdateWarning() {
   if (!firebaseUpdateWarningVisible) return;
 
-
   firebaseUpdateWarningVisible = false;
   closeModal("modal");
 
@@ -161,7 +160,6 @@ function showGiveUpReminder() {
     return;
   }
   
-
   const latestGiveUp = new Date(giveUpEvents[0].start).getTime();
   const remainingMs = latestGiveUp + GIVE_UP_LOCKOUT_MS - Date.now();
 
@@ -1201,7 +1199,7 @@ function createNewSubtask(taskId) {
   lastTick = performance.now();
   if (subtaskName && subtaskName.trim() !== "") {
     let subtaskId = crypto.randomUUID();
-    task.subtasks[subtaskId] = { id: subtaskId, name: subtaskName, done: false, deadline: null };
+    task.subtasks[subtaskId] = { id: subtaskId, name: subtaskName, done: false, deadline: null, cycle: null };
     Save(true); RenderTasks();
   }
 }
@@ -1246,6 +1244,12 @@ function openEditSubtaskModal(subtaskId) {
       <label>Deadline</label>
       <input type="date" id="modal-subtaskDeadline" value="${subtask.deadline ? new Date(subtask.deadline).toISOString().split('T')[0] : ''}">
     </div>
+    <div class="form-group">
+      <label>Cycle</label>
+      <input type="toggle" id="modal-subtaskCycle" ${subtask.cycle ? 'checked' : ''}>
+      ${subtask.cycle ? `Repeat every <input type="number" id="modal-subtaskCycleDays" value="${subtask.cycle}" min="1" style="width: 60px;"> days` : ''}
+    </div>
+    
   `;
 
   document.getElementById("btn-submit").innerText = "Save Changes";
@@ -1559,6 +1563,17 @@ function getTimeScaleCompletion(scale) {
 let isEditingAgenda = false;
 let isTimeScaleDetailsVisible = false;
 
+let agendaOffsetDays = 0;
+function shiftAgenda(direction) {
+  if (direction === 'reset') {
+    agendaOffsetDays = 0;
+  } else {
+    agendaOffsetDays += direction; 
+  }
+  RenderAgenda();
+}
+window.shiftAgenda = shiftAgenda;
+
 function RenderTimeScales(agendaData = state.agenda) {
   if (checkTimeScaleDone()) return;
   const container = document.getElementById("root-time-scales");
@@ -1569,7 +1584,6 @@ function RenderTimeScales(agendaData = state.agenda) {
       <div class="time-scale" style="text-align: center; cursor: pointer;" onclick="addTimeScale()">+ New Time Scale</div>
       ${Object.values(state.timeScales).map((scale)=>{
         const streakCount = getTimeScaleStreak(scale.id);
-        // if the current cycle of that time scale is 100% completed, we add a "completed" class to the streak badge
         const totals = Object.values(state.tasks).reduce((acc, task) => {
           acc.elapsed += Math.min(getProgressElapsed(task, scale.id), Number(task.times[scale.id]?.goal) || 0);
           acc.goal += Number(task.times[scale.id]?.goal) || 0;
@@ -1755,11 +1769,9 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
     const freeTimeUsedPercentage = initialFreeTimeMs > 0 ? Math.min(100, Math.max(0, (freeTimeUsedMs / initialFreeTimeMs) * 100)) : (freeTimeUsedMs > 0 ? 100 : 0);
     const timePercentage = (totalTimeMs > 0 && !isNaN(timeUsed)) ? Math.min(100, Math.max(0, (timeUsed / totalTimeMs) * 100)) : 0;
 
-    // compute how much time you need to work right now so the task completion percentage is at least equal to the free time used percentage
     const requiredElapsedForFreeTimePercentage = (freeTimeUsedPercentage / 100) * totals.goal;
     const additionalElapsedNeeded = requiredElapsedForFreeTimePercentage - totals.elapsed;
     const additionalElapsedNeededMs = additionalElapsedNeeded * 1000;
-
 
     let blocks = timeScaleContainer.querySelectorAll(".time-scale-progress-block");
     blocks.forEach((block) => {
@@ -2129,12 +2141,22 @@ function RenderAgenda() {
     return scaleStart < min ? scaleStart : min;
   }, Infinity);
 
-  const baseDate = new Date(earliestStart); baseDate.setHours(0, 0, 0, 0);
+  const baseDate = new Date(earliestStart);
+  baseDate.setHours(0, 0, 0, 0);
+  baseDate.setDate(baseDate.getDate() + agendaOffsetDays);
+
   const todayStr = new Date().toDateString();
   const getTimestamp = (dayOffset, timeOffset) => baseDate.getTime() + (dayOffset * 24 * 60 * 60 * 1000) + (timeOffset * 15 * 60 * 1000);
 
   container.innerHTML = `
-    <h3>Agenda</h3>
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+      <h3 style="margin: 0;">Agenda</h3>
+      <div style="display: flex; gap: 5px;">
+        <button class="btn btn-secondary btn-sm" style="padding: 2px 10px;" onclick="shiftAgenda(-1)">←</button>
+        <button class="btn btn-secondary btn-sm" style="padding: 2px 10px;" onclick="shiftAgenda('reset')">Reset</button>
+        <button class="btn btn-secondary btn-sm" style="padding: 2px 10px;" onclick="shiftAgenda(1)">→</button>
+      </div>
+    </div>
     <table id="agenda-table" style="user-select: none;">
       ${(() => {
         const longestScaleLengthDays = Object.values(state.timeScales).reduce((max, scale) => Math.max(max, scale.duration), 0);
@@ -2654,7 +2676,6 @@ function openTimeScaleStatistics(scaleId) {
   scaleStats.forEach(stat => {
     (stat.tasks || []).forEach(task => {
       const taskId = task.id || task.name;
-      // Track isHabit so we know whether to render the sessions chart
       if (!taskTotals.has(taskId)) taskTotals.set(taskId, { id: taskId, name: task.name || 'Unnamed task', isHabit: task.isHabit, total: 0, cycles: 0, history: [] });
       const aggregate = taskTotals.get(taskId);
       aggregate.isHabit = aggregate.isHabit || task.isHabit;
@@ -2816,7 +2837,7 @@ function openTimeScaleStatistics(scaleId) {
               <div 
               class="heatmap-square time-scale" 
               data-index="${index}"
-              style="margin: 0; border-radius: 6px; border: 2px ${borderStyle} ${borderColor}; background-color: hsl(${hue}, 100%, 45%); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15); aspect-ratio: 1; opacity: ${opacity}; display: flex; align-items: center; justify-content: center; color: white;">
+              style="margin: 0; border-radius: 6px; border: 2px ${borderStyle}${borderColor}; background-color: hsl(${hue}, 100\%, 45\%); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15); aspect-ratio: 1; opacity:${opacity}; display: flex; align-items: center; justify-content: center; color: white;">
                 ${streakDisplay}
               </div>
             `
@@ -2886,7 +2907,7 @@ function openTimeScaleStatistics(scaleId) {
               <text x="${chartPadding.left - 4}" y="${averageY + 3}" text-anchor="end">${formatFn(averageVal)}</text>
               <text x="${chartPadding.left - 4}" y="${chartPadding.top + chartInnerHeight + 3}" text-anchor="end">0</text>
               ${lines}
-              ${chartPoints.filter(point => point.visible).map(point => `<circle cx="${point.x}" cy="${point.y}" r="3"><title>${point.date}: ${formatFn(point[dataKey])}</title></circle>`).join('')}
+              ${chartPoints.filter(point => point.visible).map(point => `<circle cx="${point.x}" cy="${point.y}" r="3"><title>${point.date}:${formatFn(point[dataKey])}</title></circle>`).join('')}
               <text x="${chartPadding.left}" y="${chartHeight - 4}">${chartPoints[0].date}</text>
               <text x="${chartWidth - chartPadding.right}" y="${chartHeight - 4}" text-anchor="end">${chartPoints[chartPoints.length - 1].date}</text>
             </svg>
@@ -2978,10 +2999,10 @@ function openTimeScaleStatistics(scaleId) {
           ${stat.tasks && stat.tasks.length > 0 ? `
           <div class="tt-task-row" style="font-weight: bold; margin-top: 10px;">
             <span>Total Completion</span>
-            <span>${formatDuration(totals.elapsed * 1000)} / ${formatDuration(totals.goal * 1000)} <span style="margin-left: 5px;">${percentage.toFixed(1)}%</span></span>
+            <span>${formatDuration(totals.elapsed * 1000)} /${formatDuration(totals.goal * 1000)} <span style="margin-left: 5px;">${percentage.toFixed(1)}%</span></span>
           </div>
           <div class="tt-progress-bar" style="margin-bottom: 15px; height: 10px;">
-            <div class="tt-progress-fill" style="width: ${Math.min(100, percentage)}%; background-color: hsl(${hue}, 100%, 45%);"></div>
+            <div class="tt-progress-fill" style="width: ${Math.min(100, percentage)}\%; background-color: hsl(${hue}, 100%, 45%);"></div>
           </div>
           <div style="font-weight: bold; margin-bottom: 6px;">Task Breakdown</div>` : '<div style="text-align: center; color: #666; padding: 10px 0;">No tasks recorded for this time scale.</div><div style="text-align: center; color: #666; padding: 10px 0;">By definition, you have done all of your tasks.</div>'}
           ${tasksHtml}
