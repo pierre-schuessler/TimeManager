@@ -1324,7 +1324,7 @@ function RenderTasks() {
                 ${Object.values(task.subtasks).sort((a, b) => {
                   if (!a.deadline && b.deadline) return 1;
                   if (a.deadline && !b.deadline) return -1;
-                  if (!a.deadline || !b.deadline) // do it alphabetically
+                  if (!a.deadline || !b.deadline)
                     return a.name.localeCompare(b.name);
                   return new Date(a.deadline) - new Date(b.deadline);
                 }).map((subtask) => {
@@ -1351,7 +1351,9 @@ function RenderTasks() {
                         else if (diffDays > 0) relativeTime = `${diffDays} days left`;
                         else relativeTime = `${Math.abs(diffDays)} days ago`;
                         
-                        dateHtml = `<span style="font-size: 0.8em; color: #888;">(${formattedDate}, ${relativeTime})</span>`;
+                        let hue = Math.max(0, Math.min((diffDays / 7) * 120, 120));
+                        
+                        dateHtml = `<span style="font-size: 0.8em; background-color: hsl(${hue}, 100%, 90%); color: hsl(${hue}, 100%, 30%); padding: 2px 6px; border-radius: 6px;">(${formattedDate}, ${relativeTime})</span>`;
                     }
 
                     return `<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;" class="${classname}">
