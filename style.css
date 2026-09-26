@@ -159,6 +159,10 @@ footer {
     animation: fadeOut 5s linear forwards; 
 }
 
+.cycle-subtask-done{
+    background-color: green !important;
+}
+
 .task-main-content {
     width: 100%;
     display: flex;

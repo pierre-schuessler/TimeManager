@@ -1215,14 +1215,33 @@ function toggleSubtask(taskId, subtaskId) {
 
   subtask.done = !subtask.done;
 
+  clearTimeout(subtask.deleteTimeout);
+
   if (subtask.done) {
     subtask.deleteTimeout = setTimeout(() => {
-      if (task.subtasks[subtaskId]) {
+      if (!task.subtasks[subtaskId]) return;
+
+      if (subtask.cycle) {
+        subtask.done = false;
+        let currentDeadline = subtask.deadline ? new Date(subtask.deadline) : new Date();
+        currentDeadline.setDate(currentDeadline.getDate() + subtask.cycle);
+        subtask.deadline = currentDeadline.toISOString();
+        
+        if (auth.currentUser) {
+          isSavingLocally = true;
+          update(ref(db, `users/${auth.currentUser.uid}/tasks/${taskId}/subtasks/${subtaskId}`), { 
+            done: false,
+            deadline: subtask.deadline
+          });
+          Save(false);
+        } else { 
+          Save(true); 
+        }
+        RenderTasks();
+      } else {
         deleteSubtask(taskId, subtaskId);
       }
     }, 5000);
-  } else {
-    clearTimeout(subtask.deleteTimeout);
   }
   
   RenderTasks();
@@ -1246,23 +1265,48 @@ function openEditSubtaskModal(subtaskId) {
     </div>
     <div class="form-group">
       <label>Cycle</label>
-      <input type="toggle" id="modal-subtaskCycle" ${subtask.cycle ? 'checked' : ''}>
-      ${subtask.cycle ? `Repeat every <input type="number" id="modal-subtaskCycleDays" value="${subtask.cycle}" min="1" style="width: 60px;"> days` : ''}
+      <label><input type="checkbox" id="modal-subtaskCycle" ${subtask.cycle ? 'checked' : ''}> Repeating subtask</label>
+      <label id="modal-subtaskCycleLabel" style="${subtask.cycle ? '' : 'display: none;'}">Repeat every <input type="number" id="modal-subtaskCycleDays" value="${subtask.cycle || 1}" min="1" style="width: 60px;"> days</label>
     </div>
-    
+    <div class="form-group" id="warning-field-modal" style="display:none;">
+      <p style="color: red;" id="warning-modal"></p>
+    </div>
   `;
+
+  // Toggle visibility of the days input when the checkbox is clicked
+  document.getElementById("modal-subtaskCycle").addEventListener("change", function() {
+    const cycleLabel = document.getElementById("modal-subtaskCycleLabel");
+    cycleLabel.style.display = this.checked ? '' : 'none';
+  });
 
   document.getElementById("btn-submit").innerText = "Save Changes";
   document.getElementById("btn-submit").onclick = function() {
     const newName = document.getElementById("modal-subtaskName").value;
     const newDeadline = document.getElementById("modal-subtaskDeadline").value;
+    const isCycleChecked = document.getElementById("modal-subtaskCycle").checked;
+    const cycleDays = parseInt(document.getElementById("modal-subtaskCycleDays").value, 10);
+    
+    if (isCycleChecked && !newDeadline) {
+      document.getElementById("warning-modal").innerText = "Deadline is required for repeating subtasks.";
+      document.getElementById("warning-field-modal").style.display = "block";
+      return;
+    }
+
     subtask.name = newName;
     subtask.deadline = newDeadline ? new Date(newDeadline).toISOString() : null;
+    
+    // Assign the days if checked, otherwise null
+    subtask.cycle = isCycleChecked ? (isNaN(cycleDays) ? 1 : cycleDays) : null;
 
     const user = auth.currentUser;
     if (user) {
       isSavingLocally = true;
-      update(ref(db, `users/${user.uid}/tasks/${taskId}/subtasks/${subtaskId}`), { name: subtask.name, deadline: subtask.deadline });
+      // Added 'cycle: subtask.cycle' to the Firebase update payload
+      update(ref(db, `users/${user.uid}/tasks/${taskId}/subtasks/${subtaskId}`), { 
+        name: subtask.name, 
+        deadline: subtask.deadline,
+        cycle: subtask.cycle 
+      });
       Save(false);
     } else { Save(true); }
     RenderTasks(); closeModal("modal");
@@ -1334,9 +1378,11 @@ function RenderTasks() {
                 }).map((subtask) => {
                     let isChecked = subtask.done ? 'checked' : '';
                     let textStyle = subtask.done ? 'text-decoration: line-through; opacity: 0.6;' : '';
-                    let classname = subtask.done ? "task subtask-done" : "task";
+                    let classname = subtask.done && !subtask.cycle ? "task subtask-done" : "task";
+                    
                     
                     let dateHtml = '';
+                    let top_level_border_styles = "";
                     if (subtask.deadline) {
                         const deadlineDate = new Date(subtask.deadline);
                         const formattedDate = deadlineDate.toLocaleDateString('en-GB'); 
@@ -1356,11 +1402,12 @@ function RenderTasks() {
                         else relativeTime = `${Math.abs(diffDays)} days ago`;
                         
                         let hue = Math.max(0, Math.min((diffDays / 7) * 120, 120));
-                        
-                        dateHtml = `<span style="font-size: 0.8em; background-color: hsl(${hue}, 100%, 90%); color: hsl(${hue}, 100%, 30%); padding: 2px 6px; border-radius: 6px;">(${formattedDate}, ${relativeTime})</span>`;
+                        if (subtask.done) {hue = 120; top_level_border_styles = "border: 3px solid hsl(120, 100%, 90%);"};
+
+                        dateHtml = `<span style="font-size: 0.8em; background-color: hsl(${hue}, 100%, 90%); color: hsl(${hue}, 100%, 30%); padding: 2px 6px; border-radius: 6px;">${subtask.cycle ? "⟳ " : ""}(${formattedDate}, ${relativeTime})</span>`;
                     }
 
-                    return `<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;" class="${classname}">
+                    return `<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px; ${top_level_border_styles}" class="${classname}">
                         <input type="checkbox" ${isChecked} onclick="toggleSubtask('${task.id}', '${subtask.id}')"> 
                         <span style="font-weight: 500; ${textStyle}">${subtask.name}</span>
                         <div style="display: flex; align-items: center; gap: 10px; margin-left: auto;">
