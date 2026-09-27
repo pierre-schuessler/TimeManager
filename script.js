@@ -3,6 +3,68 @@ import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.16.0/firebas
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
 import { getDatabase, ref, set, get, child, onValue, update as firebaseUpdate, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
 
+const Tooltip = {
+  el: null,
+  init() {
+    if (!this.el) {
+      this.el = document.createElement("div");
+      this.el.id = "shared-tooltip";
+      this.el.style.position = "fixed";
+      this.el.style.pointerEvents = "none";
+      this.el.style.zIndex = "99999";
+      this.el.style.background = "#fff";
+      this.el.style.border = "1px solid #ccc";
+      this.el.style.boxShadow = "0 4px 15px rgba(0,0,0,0.2)";
+      this.el.style.width = "280px";
+      this.el.style.padding = "15px";
+      this.el.style.borderRadius = "8px";
+      this.el.style.color = "#333";
+      this.el.style.textAlign = "left";
+      this.el.style.opacity = "0";
+      this.el.style.transition = "opacity 0.15s ease";
+      document.body.appendChild(this.el);
+    }
+    return this.el;
+  },
+  show(content, event) {
+    const tooltip = this.init();
+    tooltip.innerHTML = content;
+    tooltip.style.opacity = "1";
+    this.move(event);
+  },
+  move(event) {
+    if (!this.el || this.el.style.opacity === "0") return;
+    const tooltipWidth = this.el.offsetWidth || 310;
+    const tooltipHeight = this.el.offsetHeight || 150;
+    let x = event.clientX - (tooltipWidth / 2);
+    let y = event.clientY - tooltipHeight - 15;
+
+    if (x < 10) x = 10;
+    if (x + tooltipWidth > window.innerWidth - 10) x = window.innerWidth - tooltipWidth - 10;
+    if (y < 10) y = event.clientY + 20;
+
+    this.el.style.left = x + "px";
+    this.el.style.top = y + "px";
+  },
+  hide() {
+    if (this.el) this.el.style.opacity = "0";
+  },
+  bind(element, contentGenerator) {
+    element.addEventListener("mouseenter", (e) => {
+      if (typeof isEditingAgenda !== 'undefined' && isEditingAgenda) { this.hide(); return; }
+      const content = typeof contentGenerator === 'function' ? contentGenerator(element) : contentGenerator;
+      if (content) this.show(content, e);
+    });
+    element.addEventListener("mousemove", (e) => {
+      if (typeof isEditingAgenda !== 'undefined' && isEditingAgenda) { this.hide(); return; }
+      this.move(e);
+    });
+    element.addEventListener("mouseleave", () => this.hide());
+  }
+};
+window.Tooltip = Tooltip;
+
+
 let firebaseUpdateWarningVisible = false;
 
 function showFirebaseUpdateWarning(type) {
@@ -1273,7 +1335,6 @@ function openEditSubtaskModal(subtaskId) {
     </div>
   `;
 
-  // Toggle visibility of the days input when the checkbox is clicked
   document.getElementById("modal-subtaskCycle").addEventListener("change", function() {
     const cycleLabel = document.getElementById("modal-subtaskCycleLabel");
     cycleLabel.style.display = this.checked ? '' : 'none';
@@ -1295,13 +1356,11 @@ function openEditSubtaskModal(subtaskId) {
     subtask.name = newName;
     subtask.deadline = newDeadline ? new Date(newDeadline).toISOString() : null;
     
-    // Assign the days if checked, otherwise null
     subtask.cycle = isCycleChecked ? (isNaN(cycleDays) ? 1 : cycleDays) : null;
 
     const user = auth.currentUser;
     if (user) {
       isSavingLocally = true;
-      // Added 'cycle: subtask.cycle' to the Firebase update payload
       update(ref(db, `users/${user.uid}/tasks/${taskId}/subtasks/${subtaskId}`), { 
         name: subtask.name, 
         deadline: subtask.deadline,
@@ -1345,6 +1404,32 @@ function getProgressElapsed(task, scaleId) {
   const time = task.times[scaleId];
   const goal = getProgressGoal(task, scaleId);
   return Math.round(task.isHabit ? (getHabitProgress(task, scaleId) / 100) * goal : Number(time?.elapsed) || 0);
+}
+
+function attachSubtaskDeadlineTooltips() {
+  document.querySelectorAll(".subtask-deadline-tag").forEach((tag) => {
+    Tooltip.bind(tag, (el) => {
+      const taskId = el.dataset.taskId;
+      const subtaskId = el.dataset.subtaskId;
+      const task = state.tasks[taskId];
+      if (!task) return null;
+      const subtask = task.subtasks[subtaskId];
+      if (!subtask) return null;
+
+      const deadlineDate = new Date(subtask.deadline);
+      const isRepeating = !!subtask.cycle;
+
+      return `
+        <div style="font-weight: bold; font-size: 1.05em; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 6px;">
+          Deadline Details
+        </div>
+        <div style="margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><strong>Task:</strong> ${task.name}</div>
+        <div style="margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><strong>Subtask:</strong> ${subtask.name}</div>
+        <div style="margin-bottom: 4px;"><strong>Due:</strong> ${deadlineDate.toLocaleString('en-GB')}</div>
+        ${isRepeating ? `<div style="margin-bottom: 4px;"><strong>Repeats:</strong> Every ${subtask.cycle} day(s)</div>` : ''}
+      `;
+    });
+  });
 }
 
 function RenderTasks() {
@@ -1404,7 +1489,7 @@ function RenderTasks() {
                         let hue = Math.max(0, Math.min((diffDays / 7) * 120, 120));
                         if (subtask.done) {hue = 120; top_level_border_styles = "border: 3px solid hsl(120, 100%, 90%);"};
 
-                        dateHtml = `<span style="font-size: 0.8em; background-color: hsl(${hue}, 100%, 90%); color: hsl(${hue}, 100%, 30%); padding: 2px 6px; border-radius: 6px;">${subtask.cycle ? "⟳ " : ""}(${formattedDate}, ${relativeTime})</span>`;
+                        dateHtml = `<span class="subtask-deadline-tag" data-task-id="${task.id}" data-subtask-id="${subtask.id}" style="font-size: 0.8em; background-color: hsl(${hue}, 100%, 90%); color: hsl(${hue}, 100%, 30%); padding: 2px 6px; border-radius: 6px;">${subtask.cycle ? "⟳ " : ""}(${formattedDate}, ${relativeTime})</span>`;
                     }
 
                     return `<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px; ${top_level_border_styles}" class="${classname}">
@@ -1455,7 +1540,16 @@ function RenderTasks() {
       }).join("")}
     </div>
   `
-  if (firstRender){ requestAnimationFrame(() => { requestAnimationFrame(() => { UpdateTasksRender(); }); }); }
+  if (firstRender){ 
+    requestAnimationFrame(() => { 
+        requestAnimationFrame(() => { 
+            UpdateTasksRender(); 
+            attachSubtaskDeadlineTooltips();
+        }); 
+    }); 
+  } else {
+    attachSubtaskDeadlineTooltips();
+  }
 }
 
 function UpdateTasksRender() {
@@ -1882,9 +1976,7 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
         return acc;
       }, { elapsed: 0, goal: 0 });
       const isCompleted = totals.goal > 0 && totals.elapsed >= totals.goal;
-      console.log(isCompleted, totals.elapsed, totals.goal);
       streakBadge.classList.toggle("completed", isCompleted);
-      console.log(streakBadge.classList);
     }
   });
 }
@@ -2253,56 +2345,14 @@ function RenderAgenda() {
 }
 
 function attachAgendaSlotTooltipHandlers() {
-  const tooltip = document.getElementById("agenda-tooltip") || (() => {
-    const newTooltip = document.createElement("div");
-    newTooltip.id = "agenda-tooltip";
-    newTooltip.style.position = "fixed";
-    newTooltip.style.pointerEvents = "none";
-    newTooltip.style.zIndex = "99999";
-    newTooltip.style.background = "#fff";
-    newTooltip.style.border = "1px solid #ccc";
-    newTooltip.style.boxShadow = "0 4px 15px rgba(0,0,0,0.2)";
-    newTooltip.style.width = "280px";
-    newTooltip.style.padding = "15px";
-    newTooltip.style.borderRadius = "8px";
-    newTooltip.style.color = "#333";
-    newTooltip.style.textAlign = "left";
-    newTooltip.style.opacity = "0";
-    newTooltip.style.transition = "opacity 0.15s ease";
-    document.body.appendChild(newTooltip);
-    return newTooltip;
-  })();
-
-  const updateTooltipPosition = (event) => {
-    const tooltipWidth = tooltip.offsetWidth || 310;
-    const tooltipHeight = tooltip.offsetHeight || 150;
-    let x = event.clientX - (tooltipWidth / 2);
-    let y = event.clientY - tooltipHeight - 15;
-
-    if (x < 10) x = 10;
-    if (x + tooltipWidth > window.innerWidth - 10) x = window.innerWidth - tooltipWidth - 10;
-    if (y < 10) y = event.clientY + 20;
-
-    tooltip.style.left = x + "px";
-    tooltip.style.top = y + "px";
-  };
-
   document.querySelectorAll(".agenda-cell").forEach((cell) => {
-    cell.onmouseenter = (event) => {
-      if (isEditingAgenda) {
-        tooltip.style.opacity = "0";
-        return;
-      }
-
-      const slotIso = cell.dataset.iso;
+    Tooltip.bind(cell, (el) => {
+      const slotIso = el.dataset.iso;
       const agendaItem = state.agenda[slotIso] || { tasksWorked: {} };
       const workedEntries = Object.entries(agendaItem.tasksWorked || {}).sort((a, b) => (Number(b[1]) || 0) - (Number(a[1]) || 0));
       const totalWorkedSeconds = workedEntries.reduce((sum, [, seconds]) => sum + (Number(seconds) || 0), 0);
 
-      if (totalWorkedSeconds <= 0) {
-        tooltip.style.opacity = "0";
-        return;
-      }
+      if (totalWorkedSeconds <= 0) return null;
 
       const slotDate = new Date(slotIso);
       const slotLabel = slotDate.toLocaleString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -2328,7 +2378,7 @@ function attachAgendaSlotTooltipHandlers() {
       const totalPercentage = Math.min(100, (totalWorkedSeconds / slotDurationSeconds) * 100);
       const totalHue = Math.min(120, (totalPercentage / 100) * 120);
 
-      tooltip.innerHTML = `
+      return `
         <div style="font-weight: bold; font-size: 1.05em; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 6px;">
           ${slotLabel}
         </div>
@@ -2341,22 +2391,7 @@ function attachAgendaSlotTooltipHandlers() {
         </div>
         ${taskRows}
       `;
-
-      tooltip.style.opacity = "1";
-      updateTooltipPosition(event);
-    };
-
-    cell.onmousemove = (event) => {
-      if (isEditingAgenda) {
-        tooltip.style.opacity = "0";
-        return;
-      }
-      updateTooltipPosition(event);
-    };
-
-    cell.onmouseleave = () => {
-      tooltip.style.opacity = "0";
-    };
+    });
   });
 }
 
@@ -2776,13 +2811,6 @@ function openTimeScaleStatistics(scaleId) {
         }
         .heatmap-square:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0,0,0,0.3); z-index: 10; }
         
-        #global-heatmap-tooltip {
-          position: fixed; pointer-events: none; z-index: 99999;
-          background: #fff; border: 1px solid #ccc; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-          width: 280px; padding: 15px; border-radius: 8px;
-          color: #333; text-align: left; opacity: 0; transition: opacity 0.15s ease;
-        }
-        
         .tt-progress-bar { width: 100%; background-color: #eee; border-radius: 4px; height: 8px; overflow: hidden; margin: 4px 0 10px 0; }
         .tt-progress-fill { height: 100%; transition: width 0.3s; }
         .tt-task-row { display: flex; justify-content: space-between; font-size: 0.85em; margin-bottom: 2px; align-items: flex-end; }
@@ -2897,13 +2925,6 @@ function openTimeScaleStatistics(scaleId) {
         }
       </div>
     `; 
-
-    let tooltip = document.getElementById("global-heatmap-tooltip");
-    if (!tooltip) {
-      tooltip = document.createElement("div");
-      tooltip.id = "global-heatmap-tooltip";
-      document.body.appendChild(tooltip);
-    }
     
     const squares = document.querySelectorAll(".heatmap-square.time-scale");
 
@@ -2988,12 +3009,10 @@ function openTimeScaleStatistics(scaleId) {
     });
     
     squares.forEach(square => {
-      square.addEventListener("mouseenter", (e) => {
-        const index = e.target.getAttribute("data-index");
+      Tooltip.bind(square, (el) => {
+        const index = el.getAttribute("data-index");
         if (!index){
-          tooltip.innerHTML = `<div style="text-align: center; color: #666; padding: 20px 10px;">No data available<br>When this time scale is over, you will see your work here</div>`;
-          tooltip.style.opacity = "1";
-          return;
+          return `<div style="text-align: center; color: #666; padding: 20px 10px;">No data available<br>When this time scale is over, you will see your work here</div>`;
         }
         const stat = scaleStats[index];
         
@@ -3039,7 +3058,7 @@ function openTimeScaleStatistics(scaleId) {
           `;
         }).join("");
 
-        tooltip.innerHTML = `
+        return `
           <div style="font-weight: bold; font-size: 1.1em; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 6px;">
             ${stat.name} <span style="color: #666; font-size: 0.85em; font-weight: normal; float: right; margin-top: 2px;">${dateRange}</span>
           </div>
@@ -3054,30 +3073,6 @@ function openTimeScaleStatistics(scaleId) {
           <div style="font-weight: bold; margin-bottom: 6px;">Task Breakdown</div>` : '<div style="text-align: center; color: #666; padding: 10px 0;">No tasks recorded for this time scale.</div><div style="text-align: center; color: #666; padding: 10px 0;">By definition, you have done all of your tasks.</div>'}
           ${tasksHtml}
         `;
-        
-        tooltip.style.opacity = "1";
-      });
-
-      square.addEventListener("mousemove", (e) => {
-        const tooltipWidth = tooltip.offsetWidth || 310; 
-        const tooltipHeight = tooltip.offsetHeight || 150;
-
-        let x = e.clientX - (tooltipWidth / 2);
-        let y = e.clientY - tooltipHeight - 15;
-        
-        if (x < 10) x = 10;
-        if (x + tooltipWidth > window.innerWidth - 10) x = window.innerWidth - tooltipWidth - 10;
-        
-        if (y < 10) {
-           y = e.clientY + 20; 
-        }
-
-        tooltip.style.left = x + "px";
-        tooltip.style.top = y + "px";
-      });
-
-      square.addEventListener("mouseleave", () => {
-        tooltip.style.opacity = "0";
       });
     });
   }
@@ -3085,8 +3080,7 @@ function openTimeScaleStatistics(scaleId) {
   document.getElementById("modal-cancel").style.display = "none";
   document.getElementById("btn-submit").innerText = "Close";
   document.getElementById("btn-submit").onclick = function() { 
-    const tooltip = document.getElementById("global-heatmap-tooltip");
-    if (tooltip) tooltip.remove();
+    Tooltip.hide();
     closeModal("modal"); 
   };
   
