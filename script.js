@@ -1421,12 +1421,11 @@ function attachSubtaskDeadlineTooltips() {
 
       return `
         <div style="font-weight: bold; font-size: 1.05em; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 6px;">
-          Deadline Details
+          ${subtask.name}
         </div>
         <div style="margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><strong>Task:</strong> ${task.name}</div>
-        <div style="margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><strong>Subtask:</strong> ${subtask.name}</div>
-        <div style="margin-bottom: 4px;"><strong>Due:</strong> ${deadlineDate.toLocaleString('en-GB')}</div>
-        ${isRepeating ? `<div style="margin-bottom: 4px;"><strong>Repeats:</strong> Every ${subtask.cycle} day(s)</div>` : ''}
+        <div style="margin-bottom: 4px;"><strong>Due:</strong> ${deadlineDate.toLocaleDateString('en-GB')}</div>
+        ${isRepeating ? `<div style="margin-bottom: 4px;"><strong>Repeats:</strong> Every ${subtask.cycle > 1 ? subtask.cycle : ""} day${subtask.cycle > 1 ? "s" : ""}</div>` : ''}
       `;
     });
   });
