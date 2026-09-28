@@ -3062,7 +3062,7 @@ function openTimeScaleStatistics(scaleId) {
 
         return `
           <div style="font-weight: bold; font-size: 1.1em; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 6px;">
-            ${stat.name} <span style="color: #666; font-size: 0.85em; font-weight: normal; float: right; margin-top: 2px;">${dateRange}</span>
+            ${dateRange} ${stat.name.endsWith("(Ongoing)") ? "(Ongoing)" : ""}
           </div>
           ${stat.tasks && stat.tasks.length > 0 ? `
           <div class="tt-task-row" style="font-weight: bold; margin-top: 10px;">
