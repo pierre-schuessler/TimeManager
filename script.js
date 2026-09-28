@@ -1671,8 +1671,9 @@ function RenderTasks() {
                         <input type="checkbox" ${isChecked} onclick="toggleSubtask('${sTaskId}', '${sSubtaskId}')"> 
                         <span style="font-weight: 500; ${textStyle}">${subtask.name}</span>
                         <div style="display: flex; align-items: center; gap: 10px; margin-left: auto;">
-                            ${dateHtml}
-                            ${studyHtml}
+                              ${studyHtml}    
+                              ${dateHtml}
+                            
                             <span style="cursor: pointer;" onclick="openEditSubtaskModal('${sSubtaskId}')">✏️</span>
                         </div>
                     </div>`
