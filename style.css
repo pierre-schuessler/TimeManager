@@ -159,8 +159,14 @@ footer {
     animation: fadeOut 5s linear forwards; 
 }
 
-.cycle-subtask-done{
-    background-color: green !important;
+@keyframes fadeOut_border_green {
+    from { border-color: hsl(120, 100%, 90%); }
+    to { border-color: transparent; }
+}
+
+.cycle-subtask-done {
+    border: 3px solid transparent; 
+    animation: fadeOut_border_green 5s linear forwards;
 }
 
 .task-main-content {

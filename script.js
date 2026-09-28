@@ -1463,7 +1463,10 @@ function RenderTasks() {
                 }).map((subtask) => {
                     let isChecked = subtask.done ? 'checked' : '';
                     let textStyle = subtask.done ? 'text-decoration: line-through; opacity: 0.6;' : '';
-                    let classname = subtask.done && !subtask.cycle ? "task subtask-done" : "task";
+                    let classname = "task";
+                    if (subtask.done) {
+                        classname = subtask.cycle ? "task cycle-subtask-done" : "task subtask-done";
+                    }
                     
                     
                     let dateHtml = '';
@@ -1487,7 +1490,7 @@ function RenderTasks() {
                         else relativeTime = `${Math.abs(diffDays)} days ago`;
                         
                         let hue = Math.max(0, Math.min((diffDays / 7) * 120, 120));
-                        if (subtask.done) {hue = 120; top_level_border_styles = "border: 3px solid hsl(120, 100%, 90%);"};
+                        if (subtask.done && subtask.cycle) {hue = 120;};
 
                         dateHtml = `<span class="subtask-deadline-tag" data-task-id="${task.id}" data-subtask-id="${subtask.id}" style="font-size: 0.8em; background-color: hsl(${hue}, 100%, 90%); color: hsl(${hue}, 100%, 30%); padding: 2px 6px; border-radius: 6px;">${subtask.cycle ? "⟳ " : ""}(${formattedDate}, ${relativeTime})</span>`;
                     }
