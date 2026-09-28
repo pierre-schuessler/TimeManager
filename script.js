@@ -1488,7 +1488,7 @@ function RenderTasks() {
                         else if (diffDays > 0) relativeTime = `${diffDays} days left`;
                         else relativeTime = `${Math.abs(diffDays)} days ago`;
                         
-                        let hue = Math.max(0, Math.min((diffDays / 7) * 120, 120));
+                        let hue = Math.max(0, 120 * (1 - Math.pow(1/3, diffDays / 7)));
                         if (subtask.done && subtask.cycle) {hue = 120;};
 
                         dateHtml = `<span class="subtask-deadline-tag" data-task-id="${task.id}" data-subtask-id="${subtask.id}" style="font-size: 0.8em; background-color: hsl(${hue}, 100%, 90%); color: hsl(${hue}, 100%, 30%); padding: 2px 6px; border-radius: 6px;">${subtask.cycle ? "⟳ " : ""}(${formattedDate}, ${relativeTime})</span>`;
