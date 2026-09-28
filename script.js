@@ -1598,7 +1598,7 @@ function RenderTasks() {
         const sTaskId = escapeStr(task.id);
         
         return `
-          <div class="task ${task.running ? "active" : ""}" style="cursor: pointer;" onclick="if (event.target.classList.contains('edit-icon') \vert{}\vert{} event.target.closest('.subtask-area') \vert{}\vert{} event.target.classList.contains('btn-snap')) { return; } toggleTask('${sTaskId}', this)">
+          <div class="task ${task.running ? "active" : ""}" style="cursor: pointer;" onclick="if (event.target.classList.contains('edit-icon') || event.target.closest('.subtask-area') || event.target.classList.contains('btn-snap')) { return; } toggleTask('${sTaskId}', this)">
             <div class="task-main-content">
               <div class="task-title-row">
                 <h3 class="task-title">${task.name}</h3>
