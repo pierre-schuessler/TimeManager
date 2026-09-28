@@ -1309,6 +1309,31 @@ function toggleSubtask(taskId, subtaskId) {
   RenderTasks();
 }
 
+// HELPER: Safely get a YYYY-MM-DD string in local time, bypassing UTC timezone shifts
+function getLocalYYYYMMDD(date) {
+    const tzOffset = date.getTimezoneOffset() * 60000;
+    return new Date(date.getTime() - tzOffset).toISOString().split('T')[0];
+}
+
+// Global helper to undo a study session directly in the modal UI
+window.undoStudySessionInModal = function(btn) {
+    const container = btn.parentElement;
+    const label = container.querySelector('label');
+    const cb = container.querySelector('.study-day-cb');
+    const textSpan = container.querySelector('.study-date-text');
+    
+    // Visually un-complete the session
+    label.style.textDecoration = 'none';
+    label.style.opacity = '1';
+    
+    // Update the data attribute so the save function knows it's no longer completed
+    cb.setAttribute('data-completed', 'false');
+    
+    // Remove the "(Done)" text and hide the Undo button
+    textSpan.innerText = textSpan.innerText.replace(' (Done)', '');
+    btn.style.display = 'none';
+};
+
 function openEditSubtaskModal(subtaskId) {
   let taskId = Object.keys(state.tasks).find(tid => state.tasks[tid].subtasks[subtaskId]);
   if (!taskId) return;
@@ -1323,12 +1348,19 @@ function openEditSubtaskModal(subtaskId) {
     </div>
     <div class="form-group">
       <label>Deadline</label>
-      <input type="date" id="modal-subtaskDeadline" value="${subtask.deadline ? new Date(subtask.deadline).toISOString().split('T')[0] : ''}">
+      <input type="date" id="modal-subtaskDeadline" value="${subtask.deadline ? getLocalYYYYMMDD(new Date(subtask.deadline)) : ''}">
     </div>
     <div class="form-group">
       <label>Cycle</label>
       <label><input type="checkbox" id="modal-subtaskCycle" ${subtask.cycle ? 'checked' : ''}> Repeating subtask</label>
       <label id="modal-subtaskCycleLabel" style="${subtask.cycle ? '' : 'display: none;'}">Repeat every <input type="number" id="modal-subtaskCycleDays" value="${subtask.cycle || 1}" min="1" style="width: 60px;"> days</label>
+    </div>
+    <div class="form-group">
+      <label>Study</label>
+      <label><input type="checkbox" id="modal-subtaskStudy" ${subtask.study ? 'checked' : ''}> Need to study</label>
+    </div>
+    <div class="form-group" id="modal-studyDaysContainer" style="display: none; background: #f9f9f9; padding: 10px; border-radius: 5px;">
+      <!-- Study days will be injected here -->
     </div>
     <div class="form-group" id="warning-field-modal" style="display:none;">
       <p style="color: red;" id="warning-modal"></p>
@@ -1340,12 +1372,97 @@ function openEditSubtaskModal(subtaskId) {
     cycleLabel.style.display = this.checked ? '' : 'none';
   });
 
+  const studyCheckbox = document.getElementById("modal-subtaskStudy");
+  const deadlineInput = document.getElementById("modal-subtaskDeadline");
+  const studyContainer = document.getElementById("modal-studyDaysContainer");
+
+  function renderStudyDays() {
+    if (!studyCheckbox.checked) {
+      studyContainer.style.display = "none";
+      return;
+    }
+    
+    const deadlineVal = deadlineInput.value;
+    if (!deadlineVal) {
+      studyContainer.style.display = "block";
+      studyContainer.innerHTML = "<p style='color: #666; font-size: 0.9em;'>Please set a deadline to schedule study days.</p>";
+      return;
+    }
+
+    studyContainer.style.display = "block";
+    const deadline = new Date(deadlineVal);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const diffDays = Math.ceil((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays <= 0) {
+      studyContainer.innerHTML = "<p style='color: #666; font-size: 0.9em;'>Deadline is too soon to schedule upcoming study days.</p>";
+      return;
+    }
+
+    let recommendedDays = new Set();
+    let currentStudyDay = 0;
+    let interval = 1;
+    
+    while (currentStudyDay < diffDays) {
+        recommendedDays.add(currentStudyDay);
+        currentStudyDay += interval;
+        interval *= 2; 
+    }
+    if (diffDays > 1) {
+        recommendedDays.add(diffDays - 1);
+    }
+    if (diffDays > 2) {
+        recommendedDays.add(diffDays - 2);
+    }
+
+    let html = '<label style="font-size: 0.9em; margin-bottom: 5px; display: block;">Select study days (Spaced Repetition Schedule):</label><div style="max-height: 120px; overflow-y: auto; display: flex; flex-direction: column; gap: 5px;">';
+    
+    for (let i = 0; i < diffDays; i++) {
+      let d = new Date(today);
+      d.setDate(d.getDate() + i);
+      let dStr = getLocalYYYYMMDD(d);
+      
+      let isChecked = recommendedDays.has(i);
+      let isCompleted = false;
+
+      if (subtask.studyDays) {
+        let existing = subtask.studyDays.find(sd => sd.date === dStr);
+        if (existing) {
+          isChecked = true;
+          isCompleted = existing.completed;
+        } else if (subtask.studyDays.length > 0) {
+          isChecked = false;
+        }
+      }
+
+      html += `
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px;">
+          <label style="font-size: 0.9em; margin: 0; cursor: pointer; ${isCompleted ? 'text-decoration: line-through; opacity: 0.6;' : ''}">
+            <input type="checkbox" class="study-day-cb" value="${dStr}" data-completed="${isCompleted}" ${isChecked ? 'checked' : ''}> 
+            <span class="study-date-text">${d.toLocaleDateString('en-GB')} ${i === 0 ? '(Today)' : ''} ${isCompleted ? ' (Done)' : ''}</span>
+          </label>
+          ${isCompleted ? `<span style="cursor: pointer; color: #1976d2; font-size: 0.85em; padding: 2px 5px;" onclick="undoStudySessionInModal(this)">Undo</span>` : ''}
+        </div>
+      `;
+    }
+    html += '</div>';
+    studyContainer.innerHTML = html;
+  }
+
+  studyCheckbox.addEventListener("change", renderStudyDays);
+  deadlineInput.addEventListener("change", renderStudyDays);
+  
+  if (subtask.study) renderStudyDays();
+
   document.getElementById("btn-submit").innerText = "Save Changes";
   document.getElementById("btn-submit").onclick = function() {
     const newName = document.getElementById("modal-subtaskName").value;
-    const newDeadline = document.getElementById("modal-subtaskDeadline").value;
+    const newDeadline = deadlineInput.value;
     const isCycleChecked = document.getElementById("modal-subtaskCycle").checked;
     const cycleDays = parseInt(document.getElementById("modal-subtaskCycleDays").value, 10);
+    const isStudyChecked = studyCheckbox.checked;
     
     if (isCycleChecked && !newDeadline) {
       document.getElementById("warning-modal").innerText = "Deadline is required for repeating subtasks.";
@@ -1353,10 +1470,22 @@ function openEditSubtaskModal(subtaskId) {
       return;
     }
 
+    let newStudyDays = [];
+    if (isStudyChecked && newDeadline) {
+      document.querySelectorAll(".study-day-cb").forEach(cb => {
+        if (cb.checked) {
+          const wasCompleted = cb.getAttribute('data-completed') === 'true';
+          newStudyDays.push({ date: cb.value, completed: wasCompleted });
+        }
+      });
+      newStudyDays.sort((a, b) => new Date(a.date) - new Date(b.date));
+    }
+
     subtask.name = newName;
     subtask.deadline = newDeadline ? new Date(newDeadline).toISOString() : null;
-    
     subtask.cycle = isCycleChecked ? (isNaN(cycleDays) ? 1 : cycleDays) : null;
+    subtask.study = isStudyChecked;
+    subtask.studyDays = isStudyChecked ? newStudyDays : null;
 
     const user = auth.currentUser;
     if (user) {
@@ -1364,7 +1493,9 @@ function openEditSubtaskModal(subtaskId) {
       update(ref(db, `users/${user.uid}/tasks/${taskId}/subtasks/${subtaskId}`), { 
         name: subtask.name, 
         deadline: subtask.deadline,
-        cycle: subtask.cycle 
+        cycle: subtask.cycle,
+        study: subtask.study,
+        studyDays: subtask.studyDays
       });
       Save(false);
     } else { Save(true); }
@@ -1372,6 +1503,27 @@ function openEditSubtaskModal(subtaskId) {
   }
 
   openModal("modal");
+}
+
+function markStudied(taskId, subtaskId, dateStr) {
+  let subtask = state.tasks[taskId].subtasks[subtaskId];
+  if (!subtask || !subtask.studyDays) return;
+  
+  let studySession = subtask.studyDays.find(sd => sd.date === dateStr);
+  if (studySession) {
+    studySession.completed = true;
+    
+    const user = auth.currentUser;
+    if (user) {
+      update(ref(db, `users/${user.uid}/tasks/${taskId}/subtasks/${subtaskId}`), { 
+        studyDays: subtask.studyDays 
+      });
+      Save(false);
+    } else {
+      Save(true);
+    }
+    RenderTasks();
+  }
 }
 
 function deleteSubtask(taskId, subtaskId) {
@@ -1436,23 +1588,27 @@ function RenderTasks() {
   let firstRender = container.innerHTML == '';
   const sortedTasks = Object.values(state.tasks).sort((a, b) => a.order - b.order);
 
+  const escapeStr = (str) => String(str).replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, '&quot;');
+
   container.innerHTML = `
     <h3>To-do List</h3>
     <div id="task-list-container">
       <div class="task" style="text-align: center; cursor: pointer;" onclick="createNewTask()">+ New Task</div>
       ${sortedTasks.map((task)=>{
+        const sTaskId = escapeStr(task.id);
+        
         return `
-          <div class="task ${task.running ? "active" : ""}" style="cursor: pointer;" onclick="if (event.target.classList.contains('edit-icon') || event.target.closest('.subtask-area') || event.target.classList.contains('btn-snap')) { return; } toggleTask('${task.id}', this)">
+          <div class="task ${task.running ? "active" : ""}" style="cursor: pointer;" onclick="if (event.target.classList.contains('edit-icon') \vert{}\vert{} event.target.closest('.subtask-area') \vert{}\vert{} event.target.classList.contains('btn-snap')) { return; } toggleTask('${sTaskId}', this)">
             <div class="task-main-content">
               <div class="task-title-row">
                 <h3 class="task-title">${task.name}</h3>
                 <div style="display: flex; gap: 10px;">
-                  ${task.isHabit ? `<button class="btn btn-primary btn-sm btn-snap" onclick="snapSession('${task.id}'); event.stopPropagation();">+1</button>` : ''}
-                  <div class="task-actions edit-icon" onclick="editTask('${task.id}')">⚙</div>
+                  ${task.isHabit ? `<button class="btn btn-primary btn-sm btn-snap" onclick="snapSession('${sTaskId}'); event.stopPropagation();">+1</button>` : ''}
+                  <div class="task-actions edit-icon" onclick="editTask('${sTaskId}')">⚙</div>
                 </div>
               </div>
               <div class="subtask-area" style="margin: 15px 0;">
-                <div class="task" style="text-align: center; cursor: pointer; padding: 5px; font-size: 0.9em; margin-bottom: 10px;" onclick="createNewSubtask('${task.id}')">+ New subtask</div>
+                <div class="task" style="text-align: center; cursor: pointer; padding: 5px; font-size: 0.9em; margin-bottom: 10px;" onclick="createNewSubtask('${sTaskId}')">+ New subtask</div>
                 ${Object.values(task.subtasks).sort((a, b) => {
                   if (!a.deadline && b.deadline) return 1;
                   if (a.deadline && !b.deadline) return -1;
@@ -1460,6 +1616,7 @@ function RenderTasks() {
                     return a.name.localeCompare(b.name);
                   return new Date(a.deadline) - new Date(b.deadline);
                 }).map((subtask) => {
+                    const sSubtaskId = escapeStr(subtask.id);
                     let isChecked = subtask.done ? 'checked' : '';
                     let textStyle = subtask.done ? 'text-decoration: line-through; opacity: 0.6;' : '';
                     let classname = "task";
@@ -1467,8 +1624,8 @@ function RenderTasks() {
                         classname = subtask.cycle ? "task cycle-subtask-done" : "task subtask-done";
                     }
                     
-                    
                     let dateHtml = '';
+                    let studyHtml = '';
                     let top_level_border_styles = "";
                     if (subtask.deadline) {
                         const deadlineDate = new Date(subtask.deadline);
@@ -1476,7 +1633,6 @@ function RenderTasks() {
                         
                         const today = new Date();
                         today.setHours(0, 0, 0, 0);
-                        deadlineDate.setHours(0, 0, 0, 0);
                         
                         const diffTime = deadlineDate.getTime() - today.getTime();
                         const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
@@ -1491,15 +1647,33 @@ function RenderTasks() {
                         let hue = Math.max(0, 120 * (1 - Math.pow(1/3, diffDays / 7)));
                         if (subtask.done && subtask.cycle) {hue = 120;};
 
-                        dateHtml = `<span class="subtask-deadline-tag" data-task-id="${task.id}" data-subtask-id="${subtask.id}" style="font-size: 0.8em; background-color: hsl(${hue}, 100%, 90%); color: hsl(${hue}, 100%, 30%); padding: 2px 6px; border-radius: 6px;">${subtask.cycle ? "⟳ " : ""}(${formattedDate}, ${relativeTime})</span>`;
+                        dateHtml = `<span class="subtask-deadline-tag" data-task-id="${sTaskId}" data-subtask-id="${sSubtaskId}" style="font-size: 0.8em; background-color: hsl(${hue}, 100%, 90%); color: hsl(${hue}, 100%, 30%); padding: 2px 6px; border-radius: 6px;">${subtask.cycle ? "⟳ " : ""}(${formattedDate}, ${relativeTime})</span>`;
+                        
+                        if (subtask.study && subtask.studyDays && !subtask.done) {
+                            const todayStr = getLocalYYYYMMDD(today);
+                            const nextStudy = subtask.studyDays.find(sd => !sd.completed);
+                            
+                            if (nextStudy) {
+                                const isToday = nextStudy.date === todayStr;
+                                const displayDate = isToday ? "Today" : new Date(nextStudy.date).toLocaleDateString('en-GB');
+                                const isReady = nextStudy.date <= todayStr;
+                                
+                                studyHtml = `
+                                <span style="font-size: 0.8em; background-color: #e3f2fd; color: #1565c0; padding: 2px 6px; border-radius: 6px; margin-left: 5px; display: inline-flex; align-items: center; gap: 4px;">
+                                    Study: ${displayDate}
+                                    ${isReady ? `<button onclick="markStudied('${sTaskId}', '${sSubtaskId}', '${nextStudy.date}')" style="background: #1976d2; color: white; border: none; border-radius: 4px; padding: 1px 5px; font-size: 0.9em; cursor: pointer;">✓</button>` : ''}
+                                </span>`;
+                            }
+                        }
                     }
 
                     return `<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px; ${top_level_border_styles}" class="${classname}">
-                        <input type="checkbox" ${isChecked} onclick="toggleSubtask('${task.id}', '${subtask.id}')"> 
+                        <input type="checkbox" ${isChecked} onclick="toggleSubtask('${sTaskId}', '${sSubtaskId}')"> 
                         <span style="font-weight: 500; ${textStyle}">${subtask.name}</span>
                         <div style="display: flex; align-items: center; gap: 10px; margin-left: auto;">
                             ${dateHtml}
-                            <span style="cursor: pointer;" onclick="openEditSubtaskModal('${subtask.id}')">✏️</span>
+                            ${studyHtml}
+                            <span style="cursor: pointer;" onclick="openEditSubtaskModal('${sSubtaskId}')">✏️</span>
                         </div>
                     </div>`
                 }).join("")}
@@ -1523,7 +1697,7 @@ function RenderTasks() {
                   }
 
                   return `
-                    <div class="task-progress-row" data-scale-id="${scale.id}" data-task-id="${task.id}">
+                    <div class="task-progress-row" data-scale-id="${scale.id}" data-task-id="${sTaskId}">
                       <div class="task-progress-meta">
                         <span>${scale.name}</span>
                         <span>${labelMiddle}</span>
@@ -3237,3 +3411,4 @@ window.openTimeScaleStatistics = openTimeScaleStatistics;
 window.giveUp = giveUp;
 window.toggleDetails = toggleDetails;
 window.openEditSubtaskModal = openEditSubtaskModal;
+window.markStudied = markStudied
