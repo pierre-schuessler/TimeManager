@@ -1257,13 +1257,10 @@ function createNewSubtask(taskId) {
   }
   let task = state.tasks[taskId];
   
-  let subtaskName = prompt("What do you need to do?");
-  lastTick = performance.now();
-  if (subtaskName && subtaskName.trim() !== "") {
-    let subtaskId = crypto.randomUUID();
-    task.subtasks[subtaskId] = { id: subtaskId, name: subtaskName, done: false, deadline: null, cycle: null };
-    Save(true); RenderTasks();
-  }
+  
+  let subtaskId = crypto.randomUUID();
+  task.subtasks[subtaskId] = { id: subtaskId, name: "New subtask", done: false, deadline: null, cycle: null };
+  openEditSubtaskModal(subtaskId)
 }
 
 function toggleSubtask(taskId, subtaskId) {
