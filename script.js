@@ -1260,7 +1260,7 @@ function createNewSubtask(taskId) {
   
   let subtaskId = crypto.randomUUID();
   task.subtasks[subtaskId] = { id: subtaskId, name: "New subtask", done: false, deadline: null, cycle: null };
-  openEditSubtaskModal(subtaskId)
+  openEditSubtaskModal(subtaskId, true)
 }
 
 function toggleSubtask(taskId, subtaskId) {
@@ -1331,13 +1331,13 @@ window.undoStudySessionInModal = function(btn) {
     btn.style.display = 'none';
 };
 
-function openEditSubtaskModal(subtaskId) {
+function openEditSubtaskModal(subtaskId, creation=false) {
   let taskId = Object.keys(state.tasks).find(tid => state.tasks[tid].subtasks[subtaskId]);
   if (!taskId) return;
   let task = state.tasks[taskId];
   let subtask = task.subtasks[subtaskId];
 
-  document.getElementById("modal-title").innerText = "Edit Subtask";
+  document.getElementById("modal-title").innerText = creation ? "Create Subtask" : "Edit Subtask";
   document.getElementById("modal-body").innerHTML = `
     <div class="form-group">
       <label>Subtask Name <span style="color:red">*</span></label>
@@ -1453,7 +1453,7 @@ function openEditSubtaskModal(subtaskId) {
   
   if (subtask.study) renderStudyDays();
 
-  document.getElementById("btn-submit").innerText = "Save Changes";
+  document.getElementById("btn-submit").innerText = creation ? "Create" : "Save Changes";
   document.getElementById("btn-submit").onclick = function() {
     const newName = document.getElementById("modal-subtaskName").value;
     const newDeadline = deadlineInput.value;
