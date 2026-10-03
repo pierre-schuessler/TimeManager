@@ -642,9 +642,7 @@ function createNewTask(){
     order: Object.keys(state.tasks).length
   };
 
-  Save(true)
-  RenderTasks()
-  RenderTimeScales()
+  editTask(newId, true)
 }
 
 function catchUpLocalAgenda() {
@@ -1074,15 +1072,17 @@ function moveTaskUp(id) {
   }
 }
 
-async function editTask(id) {
-  await Load();
+async function editTask(id, creation = false) {
+  if (!creation) {
+    await Load();
+  }
   let task = state.tasks[id];
   if (task.running){ window.alert("Please stop the task before editing it."); return; }
   
   let tasksArray = Object.values(state.tasks).sort((a, b) => a.order - b.order);
   let taskIndex = tasksArray.findIndex(t => t.id === id);
   
-  document.getElementById("modal-title").innerText = "Edit Task";
+  document.getElementById("modal-title").innerText = creation ? "Create Task" :"Edit Task";
   document.getElementById("modal-body").innerHTML = `
     <div class="form-group">
       <label>Name <span style="color:red">*</span></label>
@@ -1175,7 +1175,7 @@ async function editTask(id) {
     <button class="btn btn-danger" id="delete-button" onclick="deleteTask('${task.id}')" style="margin-right: 5px;">Delete</button>
   `);
 
-  document.getElementById("btn-submit").innerText = "Save Changes";
+  document.getElementById("btn-submit").innerText = creation ? "Create" : "Save Changes";
   document.getElementById("btn-submit").onclick = function() {
     const newName = document.getElementById("modal-taskName").value;
     if (!newName) { alert("Invalid input. Please try again."); return; }
