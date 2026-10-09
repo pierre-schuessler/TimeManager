@@ -788,7 +788,6 @@ function streakIncreaseAnimation(scaleId) {
   const scale = state.timeScales[scaleId];
   if (!scale) return;
 
-  
   const totals = Object.values(state.tasks).reduce((acc, t) => {
     acc.elapsed += Math.min(getProgressElapsed(t, scaleId), Number(t.times[scaleId]?.goal) || 0);
     acc.goal += Number(t.times[scaleId]?.goal) || 0;
@@ -799,7 +798,6 @@ function streakIncreaseAnimation(scaleId) {
   const newStreak = getTimeScaleStreak(scaleId) + (taskPercentage >= 100 ? 1 : 0);
   const oldStreak = Math.max(0, newStreak - 1);
 
-  
   const overlay = document.createElement('div');
   overlay.className = 'streak-overlay';
 
@@ -813,7 +811,6 @@ function streakIncreaseAnimation(scaleId) {
   const ringContainer = document.createElement('div');
   ringContainer.className = 'streak-ring-container';
 
-  
   ringContainer.innerHTML = `
     <svg class="progress-ring" width="300" height="300">
       <circle class="ring-bg" cx="150" cy="150" r="130" stroke-width="12" fill="transparent"/>
@@ -837,11 +834,8 @@ function streakIncreaseAnimation(scaleId) {
   overlay.appendChild(content);
   document.body.appendChild(overlay);
 
-  
   void overlay.offsetWidth; 
   overlay.classList.add('active');
-  
-
 
   const ringFill = ringContainer.querySelector('.ring-fill');
   const badge = ringContainer.querySelector('.streak-anim-badge');
@@ -934,53 +928,6 @@ async function toggleTask(id, UITarget) {
     UpdateTasksRender();
     UpdateTimeScalesRender();
     timerWorker.postMessage('start');
-  }
-}
-
-function syncAgendaGap(taskId, gap) {
-  if (gap === 0) return;
-  let now = new Date().getTime();
-  
-  if (gap > 0) {
-    let timeRemaining = gap * 1000;
-    let timeMarker = now;
-    while (timeRemaining > 0) {
-      let markerDate = new Date(timeMarker);
-      let minutes = Math.floor(markerDate.getMinutes() / 15) * 15;
-      let slotStart = new Date(markerDate.getFullYear(), markerDate.getMonth(), markerDate.getDate(), markerDate.getHours(), minutes, 0, 0);
-      let slotStartTime = slotStart.getTime();
-      
-      let timeInThisSlot;
-      if (timeMarker === slotStartTime) { timeMarker -= 1; continue; }
-      else { timeInThisSlot = Math.min(timeRemaining, timeMarker - slotStartTime); }
-      
-      let currentSlotIso = getSafeIsoString(slotStart);
-      
-      if (!state.agenda[currentSlotIso]) state.agenda[currentSlotIso] = { iso: currentSlotIso, busy: false, tasksWorked: {} };
-      if (!state.agenda[currentSlotIso].tasksWorked) state.agenda[currentSlotIso].tasksWorked = {};
-      
-      state.agenda[currentSlotIso].tasksWorked[taskId] = (state.agenda[currentSlotIso].tasksWorked[taskId] || 0) + (timeInThisSlot / 1000);
-      timeMarker -= timeInThisSlot;
-      timeRemaining -= timeInThisSlot;
-    }
-  } else {
-    let timeToRemove = Math.abs(gap);
-    let sortedIsos = Object.keys(state.agenda).sort((a,b) => new Date(b).getTime() - new Date(a).getTime());
-    
-    for (let iso of sortedIsos) {
-      if (timeToRemove <= 0) break;
-      let block = state.agenda[iso];
-      if (block.tasksWorked && block.tasksWorked[taskId] > 0) {
-        let availableToRemove = block.tasksWorked[taskId];
-        if (availableToRemove >= timeToRemove) {
-          block.tasksWorked[taskId] -= timeToRemove;
-          timeToRemove = 0;
-        } else {
-          timeToRemove -= availableToRemove;
-          block.tasksWorked[taskId] = 0;
-        }
-      }
-    }
   }
 }
 
@@ -1257,7 +1204,6 @@ function createNewSubtask(taskId) {
   }
   let task = state.tasks[taskId];
   
-  
   let subtaskId = crypto.randomUUID();
   task.subtasks[subtaskId] = { id: subtaskId, name: "New subtask", done: false, deadline: null, cycle: null };
   openEditSubtaskModal(subtaskId, true)
@@ -1306,27 +1252,22 @@ function toggleSubtask(taskId, subtaskId) {
   RenderTasks();
 }
 
-// HELPER: Safely get a YYYY-MM-DD string in local time, bypassing UTC timezone shifts
 function getLocalYYYYMMDD(date) {
     const tzOffset = date.getTimezoneOffset() * 60000;
     return new Date(date.getTime() - tzOffset).toISOString().split('T')[0];
 }
 
-// Global helper to undo a study session directly in the modal UI
 window.undoStudySessionInModal = function(btn) {
     const container = btn.parentElement;
     const label = container.querySelector('label');
     const cb = container.querySelector('.study-day-cb');
     const textSpan = container.querySelector('.study-date-text');
     
-    // Visually un-complete the session
     label.style.textDecoration = 'none';
     label.style.opacity = '1';
     
-    // Update the data attribute so the save function knows it's no longer completed
     cb.setAttribute('data-completed', 'false');
     
-    // Remove the "(Done)" text and hide the Undo button
     textSpan.innerText = textSpan.innerText.replace(' (Done)', '');
     btn.style.display = 'none';
 };
@@ -2203,7 +2144,6 @@ const getCellBgStyles = (busy, totalSecondsWorked) => {
   else if (hasWork) { styles = { background: `linear-gradient(90deg, transparent 0%, transparent calc(50% - ${percent * 50}%), ${greenColor} calc(50% - ${percent * 50}%), ${greenColor} calc(50% + ${percent * 50}%), transparent calc(50% + ${percent * 50}%), transparent 100%)`, backgroundColor: '' }; } 
   else { styles = { background: '', backgroundColor: 'transparent' }; }
   
-  
   return styles;
 };
 
@@ -2462,8 +2402,12 @@ function RenderAgenda() {
   const getTimestamp = (dayOffset, timeOffset) => baseDate.getTime() + (dayOffset * 24 * 60 * 60 * 1000) + (timeOffset * 15 * 60 * 1000);
 
   container.innerHTML = `
-    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
       <h3 style="margin: 0;">Agenda</h3>
+      <div style="display: flex; gap: 5px;">
+        <button id="btn-mode-busy" class="btn ${agendaMode === 'busy' ? 'btn-primary' : 'btn-secondary'} btn-sm" style="padding: 2px 10px;" onclick="setAgendaMode('busy')">Busy</button>
+        <button id="btn-mode-work" class="btn ${agendaMode === 'work' ? 'btn-primary' : 'btn-secondary'} btn-sm" style="padding: 2px 10px;" onclick="setAgendaMode('work')">Work</button>
+      </div>
       <div style="display: flex; gap: 5px;">
         <button class="btn btn-secondary btn-sm" style="padding: 2px 10px;" onclick="shiftAgenda(-1)">←</button>
         <button class="btn btn-secondary btn-sm" style="padding: 2px 10px;" onclick="shiftAgenda('reset')">Reset</button>
@@ -2500,7 +2444,7 @@ function RenderAgenda() {
             
             const bg = getCellBgStyles(busy, totalSecondsWorked);
             let inlineStyleStr = bg.background ? `background: ${bg.background};` : `background-color: ${bg.backgroundColor};`;
-            if (bg.borderLeft) inlineStyleStr += ` border-left: ${bg.borderLeft}; border-right: ${bg.borderRight};`;
+            if (bg.borderLeft) inlineStyleStr += ` border-left: ${bg.borderLeft}; border-right:${bg.borderRight};`;
             
             rowCells.push(`<td class="agenda-cell" data-day="${j}" data-time="${i}" data-iso="${isoString}" style="border-top: ${isFullHour ? "3" : "1"}px solid black; ${inlineStyleStr}"></td>`);
           }
@@ -2510,6 +2454,23 @@ function RenderAgenda() {
       })()}
     </table>
   `;
+
+  const busyBtn = document.getElementById("btn-mode-busy");
+  if (busyBtn) {
+    Tooltip.bind(busyBtn, `
+      <div style="font-weight: bold; font-size: 1.05em; margin-bottom: 6px; border-bottom: 1px solid #eee; padding-bottom: 4px;">Busy Mode</div>
+      <p style="margin: 0; font-size: 0.9em; line-height: 1.4; color: #444;">Click and drag over slots to block out sleep, commitments, or unavailable hours. These are subtracted from your available workable time.</p>
+    `);
+  }
+
+  const workBtn = document.getElementById("btn-mode-work");
+  if (workBtn) {
+    Tooltip.bind(workBtn, `
+      <div style="font-weight: bold; font-size: 1.05em; margin-bottom: 6px; border-bottom: 1px solid #eee; padding-bottom: 4px;">Work Mode</div>
+      <p style="margin: 0; font-size: 0.9em; line-height: 1.4; color: #444;">Click and drag over slots to retroactively add or remove logged work for any task, adjusting both elapsed progress and the visual agenda.</p>
+    `);
+  }
+
   buildAgendaSelector();
   attachAgendaSlotTooltipHandlers();
   updateCurrentTimeLine();
@@ -2596,6 +2557,126 @@ const updatePreview = (startCellData, currentHoverData) => {
   });
 };
 
+let agendaMode = 'busy';
+window.setAgendaMode = (mode) => { agendaMode = mode; RenderAgenda(); };
+
+const SLOT_SECONDS = 15 * 60;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function applyWorkEdit(taskId, isos, add, deltaSec) {
+  const task = state.tasks[taskId];
+  if (!task || !isos.length || !(deltaSec > 0)) return;
+  const sign = add ? 1 : -1;
+  const share = deltaSec / isos.length;
+
+  isos.forEach(iso => {
+    const slot = state.agenda[iso] || (state.agenda[iso] = { iso, busy: false, tasksWorked: {} });
+    if (!slot.tasksWorked) slot.tasksWorked = {};
+    const cur = slot.tasksWorked[taskId] || 0;
+    if (add) {
+      const total = Object.values(slot.tasksWorked).reduce((a, b) => a + b, 0);
+      const free = Math.max(0, SLOT_SECONDS - total);
+      slot.tasksWorked[taskId] = cur + Math.min(share, free);
+    } else {
+      slot.tasksWorked[taskId] = cur - Math.min(share, cur);
+    }
+  });
+
+  const realStats = Object.values(state.statistics).filter(isRealProgressStat);
+  const statDelta = new Map();
+
+  isos.forEach(iso => {
+    const t = new Date(iso).getTime();
+
+    Object.values(state.timeScales).forEach(scale => {
+      const start = new Date(scale.start).getTime();
+      if (t >= start && t < start + scale.duration * DAY_MS) {
+        if (task.times[scale.id]) {
+          task.times[scale.id].elapsed = Math.max(0, Math.round((Number(task.times[scale.id].elapsed) || 0) + sign * share));
+        }
+      }
+    });
+
+    realStats.forEach(stat => {
+      const start = new Date(stat.start).getTime();
+      if (t >= start && t < start + (Number(stat.duration) || 0) * DAY_MS) {
+        statDelta.set(stat, (statDelta.get(stat) || 0) + sign * share);
+      }
+    });
+  });
+
+  statDelta.forEach((delta, stat) => {
+    const entry = (stat.tasks || []).find(x => x.id === taskId);
+    if (!entry) return;
+    const raw = entry.rawElapsed !== undefined ? Number(entry.rawElapsed) : Number(entry.elapsed) || 0;
+    entry.rawElapsed = Math.max(0, Math.round(raw + delta));
+    if (!entry.isHabit) entry.elapsed = Math.max(0, Math.round((Number(entry.elapsed) || 0) + delta));
+  });
+}
+
+function openWorkEditModal(isos) {
+  isos = [...isos].sort();
+  const tasks = Object.values(state.tasks).sort((a, b) => a.order - b.order);
+  if (!tasks.length) { alert("Create a task first."); return; }
+
+  const def = isos.length * SLOT_SECONDS;
+  const h = Math.floor(def / 3600), m = Math.floor((def % 3600) / 60), s = def % 60;
+  const escapeName = (n) => String(n).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+
+  document.getElementById("modal-title").innerText = `Edit work (${isos.length} slot${isos.length > 1 ? 's' : ''})`;
+  document.getElementById("modal-body").innerHTML = `
+    <div class="form-group">
+      <label>Task</label>
+      <select id="work-edit-task">
+        ${tasks.map(t => `<option value="${t.id}">${escapeName(t.name)}${t.running ? ' (running)' : ''}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group">
+      <label><input type="radio" name="work-edit-action" value="add" checked> I worked on this task during these slots</label>
+      <label><input type="radio" name="work-edit-action" value="remove"> I did NOT work on this task during these slots</label>
+    </div>
+    <div class="form-group">
+      <label>Amount of work to add / remove</label>
+      <div style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap;">
+        <input type="number" id="work-edit-h" value="${h}" min="0" style="width: 55px;"> h
+        <input type="number" id="work-edit-m" value="${m}" min="0" max="59" style="width: 55px;"> m
+        <input type="number" id="work-edit-s" value="${s}" min="0" max="59" style="width: 55px;"> s
+      </div>
+      <p style="font-size: 0.85em; color: #666; margin: 6px 0 0;">
+        This exact amount is added to / removed from the task's elapsed time. The agenda is updated to match visually.
+      </p>
+    </div>
+    <div class="form-group" id="warning-field-modal" style="display:none;">
+      <p style="color: red;" id="warning-modal"></p>
+    </div>
+  `;
+
+  document.getElementById("btn-submit").innerText = "Apply";
+  document.getElementById("btn-submit").onclick = function () {
+    const taskId = document.getElementById("work-edit-task").value;
+    const add = document.querySelector('input[name="work-edit-action"]:checked').value === 'add';
+    const delta =
+      (parseInt(document.getElementById("work-edit-h").value) || 0) * 3600 +
+      (parseInt(document.getElementById("work-edit-m").value) || 0) * 60 +
+      (parseInt(document.getElementById("work-edit-s").value) || 0);
+
+    const warn = (msg) => {
+      document.getElementById("warning-modal").innerText = msg;
+      document.getElementById("warning-field-modal").style.display = "block";
+    };
+    if (state.tasks[taskId]?.running) { warn("Please stop this task before editing its work."); return; }
+    if (delta <= 0) { warn("Please enter an amount greater than zero."); return; }
+    if (add && delta > isos.length * SLOT_SECONDS) { warn("You can't add more than 15 minutes per selected slot."); return; }
+
+    applyWorkEdit(taskId, isos, add, delta);
+    Save(true);
+    closeModal("modal");
+    RenderTasks(); RenderTimeScales(); RenderAgenda();
+  };
+  openModal("modal");
+}
+window.openWorkEditModal = openWorkEditModal;
+
 function buildAgendaSelector() {
   const table = document.getElementById("agenda-table");
   let startCellData = null; let currentHoverData = null;
@@ -2616,12 +2697,23 @@ function buildAgendaSelector() {
     return previewAgenda;
   };
 
+  const drawWorkSelection = (start, current) => {
+    document.querySelectorAll('.agenda-cell').forEach(cell => {
+      const inBox = start && current && isinBox(getDataFromCell(cell), start, current);
+      cell.style.boxShadow = inBox ? 'inset 0 0 0 2px #1976d2' : '';
+    });
+  };
+
   table.addEventListener("mousedown", (event) => {
     if (event.target.tagName === "TD" && event.target.classList.contains("agenda-cell")) {
       startCellData = getDataFromCell(event.target);
       currentHoverData = startCellData;
-      updatePreview(startCellData, currentHoverData);
-      UpdateTimeScalesRender(getPreviewAgenda(startCellData, currentHoverData));
+      if (agendaMode === 'work') {
+        drawWorkSelection(startCellData, currentHoverData);
+      } else {
+        updatePreview(startCellData, currentHoverData);
+        UpdateTimeScalesRender(getPreviewAgenda(startCellData, currentHoverData));
+      }
       isEditingAgenda = true;
     }
   });
@@ -2629,8 +2721,12 @@ function buildAgendaSelector() {
   table.addEventListener("mouseover", (event) => {
     if (startCellData && event.target.tagName === "TD" && event.target.classList.contains("agenda-cell")) {
       currentHoverData = getDataFromCell(event.target);
-      updatePreview(startCellData, currentHoverData);
-      UpdateTimeScalesRender(getPreviewAgenda(startCellData, currentHoverData));
+      if (agendaMode === 'work') {
+        drawWorkSelection(startCellData, currentHoverData);
+      } else {
+        updatePreview(startCellData, currentHoverData);
+        UpdateTimeScalesRender(getPreviewAgenda(startCellData, currentHoverData));
+      }
     }
   });
 
@@ -2638,6 +2734,18 @@ function buildAgendaSelector() {
 
   window.agendaMouseUpHandler = () => {
     if (startCellData && currentHoverData) {
+      if (agendaMode === 'work') {
+        const isos = [];
+        document.querySelectorAll('.agenda-cell').forEach(cell => {
+          const cellData = getDataFromCell(cell);
+          if (isinBox(cellData, startCellData, currentHoverData)) isos.push(cellData.iso);
+        });
+        startCellData = null; currentHoverData = null; isEditingAgenda = false;
+        drawWorkSelection(null, null);
+        openWorkEditModal(isos);
+        return;
+      }
+
       document.querySelectorAll('.agenda-cell').forEach(cell => {
         const cellData = getDataFromCell(cell);
         if (isinBox(cellData, startCellData, currentHoverData)) {
@@ -2844,8 +2952,6 @@ function streakLostAnimation(scaleId, lostStreak) {
       <span class="streak-anim-number" style="transition: opacity 0.3s;">${lostStreak}</span>
     </div>
   `;
-
-  
 
   content.appendChild(title);
   content.appendChild(ringContainer);
@@ -3261,8 +3367,6 @@ function openTimeScaleStatistics(scaleId) {
   openModal("modal");
 }
 
-  
-
 function openHelp(){
   document.getElementById("modal-title").innerText = "How to use the tracker";
   document.getElementById("modal-body").innerHTML = `
@@ -3409,4 +3513,4 @@ window.openTimeScaleStatistics = openTimeScaleStatistics;
 window.giveUp = giveUp;
 window.toggleDetails = toggleDetails;
 window.openEditSubtaskModal = openEditSubtaskModal;
-window.markStudied = markStudied
+window.markStudied = markStudied;
