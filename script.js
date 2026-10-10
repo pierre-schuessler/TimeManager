@@ -73,8 +73,10 @@ function showFirebaseUpdateWarning(type) {
   if (type === "update-timeout") {
     document.getElementById("modal-title").innerText = "Update failed";
     document.getElementById("modal-body").innerHTML = `<p>It seems that we couldn't reach the database.</p><p>Please check your internet connection.</p><p>This window should automatically close when your connection is restored. If it doesn't, you can reload the page to try again.</p>`;
-  }
-  else if (type === "out-of-sync") {
+  } else if (type === "update-failed") {
+    document.getElementById("modal-title").innerText = "Update failed";
+    document.getElementById("modal-body").innerHTML = `<p>We couldn't save your changes to the database.</p><p>Please check your connection and reload the page before trying again.</p>`;
+  } else if (type === "out-of-sync") {
     document.getElementById("modal-title").innerText = "You are out of sync with the database";
     document.getElementById("modal-body").innerHTML = `<p>It seems you have been disconnected from the database for a while. To prevent data loss, you will need to reload the page and try again.</p><p>Please be aware that your last change was not saved.</p>`;
   }
@@ -117,6 +119,9 @@ const update = (reference, data, timeoutMs = 1500) => {
     .catch((error) => {
       if (error.message === "Update timed out") {
         showFirebaseUpdateWarning("update-timeout");
+      } else {
+        console.error("Firebase update failed:", error);
+        showFirebaseUpdateWarning("update-failed");
       }
       throw error;
     });
@@ -148,6 +153,68 @@ let state = {
   timeScales: {},
   agenda: {},
   statistics: {}
+};
+
+function normalizeSubtasks(rawSubtasks) {
+  if (!rawSubtasks) return {};
+  const normalize = (subtask, id) => {
+    if (!subtask || typeof subtask !== 'object') return null;
+    const normalized = { ...subtask, id: subtask.id || id };
+    delete normalized.deleteAt;
+    delete normalized.deleteTimeout;
+    if (normalized.done) normalized.done = false;
+    return normalized;
+  };
+
+  if (Array.isArray(rawSubtasks)) {
+    const map = {};
+    rawSubtasks.forEach((sub, idx) => {
+      const normalized = normalize(sub, String(idx));
+      if (normalized) map[normalized.id] = normalized;
+    });
+    return map;
+  }
+  if (typeof rawSubtasks === 'object') {
+    const map = {};
+    Object.entries(rawSubtasks).forEach(([id, sub]) => {
+      const normalized = normalize(sub, id);
+      if (normalized) map[normalized.id] = normalized;
+    });
+    return map;
+  }
+  return {};
+}
+
+function scheduleSubtaskCompletion(taskId, subtaskId) {
+  const subtask = state.tasks[taskId]?.subtasks?.[subtaskId];
+  if (!subtask || !subtask.done) return;
+
+  subtask.deleteTimeout = setTimeout(() => {
+    const currentSubtask = state.tasks[taskId]?.subtasks?.[subtaskId];
+    if (!currentSubtask || !currentSubtask.done) return;
+
+    currentSubtask.deleteTimeout = null;
+    if (currentSubtask.cycle) {
+      currentSubtask.done = false;
+      let currentDeadline = currentSubtask.deadline ? new Date(currentSubtask.deadline) : new Date();
+      currentDeadline.setDate(currentDeadline.getDate() + currentSubtask.cycle);
+      currentSubtask.deadline = currentDeadline.toISOString();
+
+      if (auth.currentUser) {
+        isSavingLocally = true;
+        update(ref(db, `users/${auth.currentUser.uid}/tasks/${taskId}/subtasks/${subtaskId}`), {
+          done: false,
+          deadline: currentSubtask.deadline
+        });
+        Save(false);
+      } else {
+        Save(true);
+      }
+      RenderTasks();
+    } else {
+      deleteSubtask(taskId, subtaskId);
+    }
+  }, 5000);
 }
 
 function getTimerBaseline(task) {
@@ -358,15 +425,15 @@ function openLogin(){
       return userCredential.user;
     } catch (error) {
       if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
-      try {
-        const newUserCredential = await createUserWithEmailAndPassword(auth, email, password);
-        closeModal("modal");
-        return newUserCredential.user;
-      } catch (creationError) {
-        console.error("Error creating account:", creationError.message);
-      }
+        try {
+          const newUserCredential = await createUserWithEmailAndPassword(auth, email, password);
+          closeModal("modal");
+          return newUserCredential.user;
+        } catch (creationError) {
+          console.error("Error creating account:", creationError.message);
+        }
       } else {
-      console.error("Error during sign in:", error.message);
+        console.error("Error during sign in:", error.message);
       }
     }
   }
@@ -407,7 +474,7 @@ async function migrateToFirebase() {
         if (task.times[scaleId].sessions === undefined) task.times[scaleId].sessions = 0;
         if (task.times[scaleId].targetSessions === undefined) task.times[scaleId].targetSessions = 1;
       });
-      if (!task.subtasks) task.subtasks = {};
+      task.subtasks = normalizeSubtasks(task.subtasks);
     });
 
     let loadedAgenda = localAgenda ? JSON.parse(localAgenda) : {};
@@ -443,7 +510,6 @@ function setupFirebaseListener() {
   const userRef = ref(db, `users/${user.uid}`);
   
   onValue(userRef, (snapshot) => {
-    
     if (isSavingLocally) {
       isSavingLocally = false; 
       hasSyncedWithFirebase = true;
@@ -470,7 +536,17 @@ function setupFirebaseListener() {
           if (task.times[scaleId].sessions === undefined) task.times[scaleId].sessions = 0;
           if (task.times[scaleId].targetSessions === undefined) task.times[scaleId].targetSessions = 1;
         });
-        if (!task.subtasks) task.subtasks = {};
+        
+        const existingSubtasks = state.tasks[task.id]?.subtasks || {};
+        const incomingNormalized = normalizeSubtasks(task.subtasks);
+        
+        Object.keys(incomingNormalized).forEach(subId => {
+          if (existingSubtasks[subId]?.deleteTimeout) {
+            incomingNormalized[subId].deleteTimeout = existingSubtasks[subId].deleteTimeout;
+            incomingNormalized[subId].done = true;
+          }
+        });
+        task.subtasks = incomingNormalized;
       });
       state.tasks = incomingTasks;
       
@@ -547,9 +623,8 @@ async function Load() {
       if (task.times[scaleId].sessions === undefined) task.times[scaleId].sessions = 0;
       if (task.times[scaleId].targetSessions === undefined) task.times[scaleId].targetSessions = 1;
     });
-    if (!task.subtasks) task.subtasks = {};
+    task.subtasks = normalizeSubtasks(task.subtasks);
   });
-
   let rawAgenda = rawData.agenda ? JSON.parse(rawData.agenda) : {};
   state.agenda = {};
   Object.entries(rawAgenda).forEach(([iso, item]) => {
@@ -568,7 +643,7 @@ async function Save(firebase = false) {
     let cleanSubtasks = {};
     Object.values(task.subtasks || {}).forEach(sub => {
       let { deleteTimeout, ...cleanSub } = sub;
-      cleanSubtasks[sub.id] = cleanSub;
+      cleanSubtasks[sub.id] = { ...cleanSub, done: sub.deleteTimeout ? false : !!sub.done };
     });
     cleanTasks[task.id] = { ...task, running: !!task.running, subtasks: cleanSubtasks };
   });
@@ -585,10 +660,9 @@ async function Save(firebase = false) {
   const user = auth.currentUser;
   
   if (user && firebase) {
-    if (!hasSyncedWithFirebase)
-    {
-        showFirebaseUpdateWarning("out-of-sync");
-        return;
+    if (!hasSyncedWithFirebase) {
+      showFirebaseUpdateWarning("out-of-sync");
+      return;
     };
     isSavingLocally = true; 
     try {
@@ -935,8 +1009,6 @@ function snapSession(taskId) {
   let task = state.tasks[taskId];
   if (!task || !task.isHabit) return;
 
-  let firstScaleId = Object.keys(state.timeScales)[0];
-  
   let anyCrossed = false;
   let isAllCompleted = true;
   let wasAllCompleted = Object.values(state.timeScales).every(scale =>
@@ -990,7 +1062,8 @@ function snapSession(taskId) {
 
   if (anyCrossed) ding(1);
   if (isAllCompleted && !wasAllCompleted) ding(2);
-  if (scaleFinished) {ding(3);
+  if (scaleFinished) {
+    ding(3);
     streakIncreaseAnimation(scaleFinished);
   }
 
@@ -1203,10 +1276,11 @@ function createNewSubtask(taskId) {
     return;
   }
   let task = state.tasks[taskId];
+  if (!task.subtasks) task.subtasks = {};
   
   let subtaskId = crypto.randomUUID();
   task.subtasks[subtaskId] = { id: subtaskId, name: "New subtask", done: false, deadline: null, cycle: null };
-  openEditSubtaskModal(subtaskId, true)
+  openEditSubtaskModal(subtaskId, true);
 }
 
 function toggleSubtask(taskId, subtaskId) {
@@ -1216,64 +1290,58 @@ function toggleSubtask(taskId, subtaskId) {
   }
 
   let task = state.tasks[taskId];
+  if (!task || !task.subtasks) return;
   let subtask = task.subtasks[subtaskId];
+  if (!subtask) return;
 
   subtask.done = !subtask.done;
 
-  clearTimeout(subtask.deleteTimeout);
+  if (subtask.deleteTimeout) {
+    clearTimeout(subtask.deleteTimeout);
+    subtask.deleteTimeout = null;
+  }
+
+  const user = auth.currentUser;
 
   if (subtask.done) {
-    subtask.deleteTimeout = setTimeout(() => {
-      if (!task.subtasks[subtaskId]) return;
-
-      if (subtask.cycle) {
-        subtask.done = false;
-        let currentDeadline = subtask.deadline ? new Date(subtask.deadline) : new Date();
-        currentDeadline.setDate(currentDeadline.getDate() + subtask.cycle);
-        subtask.deadline = currentDeadline.toISOString();
-        
-        if (auth.currentUser) {
-          isSavingLocally = true;
-          update(ref(db, `users/${auth.currentUser.uid}/tasks/${taskId}/subtasks/${subtaskId}`), { 
-            done: false,
-            deadline: subtask.deadline
-          });
-          Save(false);
-        } else { 
-          Save(true); 
-        }
-        RenderTasks();
-      } else {
-        deleteSubtask(taskId, subtaskId);
-      }
-    }, 5000);
+    scheduleSubtaskCompletion(taskId, subtaskId);
+  } else {
+    if (user) {
+      isSavingLocally = true;
+      update(ref(db, `users/${user.uid}/tasks/${taskId}/subtasks/${subtaskId}`), {
+        done: false
+      });
+      Save(false);
+    } else {
+      Save(true);
+    }
   }
   
   RenderTasks();
 }
 
 function getLocalYYYYMMDD(date) {
-    const tzOffset = date.getTimezoneOffset() * 60000;
-    return new Date(date.getTime() - tzOffset).toISOString().split('T')[0];
+  const tzOffset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - tzOffset).toISOString().split('T')[0];
 }
 
 window.undoStudySessionInModal = function(btn) {
-    const container = btn.parentElement;
-    const label = container.querySelector('label');
-    const cb = container.querySelector('.study-day-cb');
-    const textSpan = container.querySelector('.study-date-text');
-    
-    label.style.textDecoration = 'none';
-    label.style.opacity = '1';
-    
-    cb.setAttribute('data-completed', 'false');
-    
-    textSpan.innerText = textSpan.innerText.replace(' (Done)', '');
-    btn.style.display = 'none';
+  const container = btn.parentElement;
+  const label = container.querySelector('label');
+  const cb = container.querySelector('.study-day-cb');
+  const textSpan = container.querySelector('.study-date-text');
+  
+  label.style.textDecoration = 'none';
+  label.style.opacity = '1';
+  
+  cb.setAttribute('data-completed', 'false');
+  
+  textSpan.innerText = textSpan.innerText.replace(' (Done)', '');
+  btn.style.display = 'none';
 };
 
 function openEditSubtaskModal(subtaskId, creation=false) {
-  let taskId = Object.keys(state.tasks).find(tid => state.tasks[tid].subtasks[subtaskId]);
+  let taskId = Object.keys(state.tasks).find(tid => state.tasks[tid].subtasks && state.tasks[tid].subtasks[subtaskId]);
   if (!taskId) return;
   let task = state.tasks[taskId];
   let subtask = task.subtasks[subtaskId];
@@ -1344,15 +1412,15 @@ function openEditSubtaskModal(subtaskId, creation=false) {
     let interval = 1;
     
     while (currentStudyDay < diffDays) {
-        recommendedDays.add(currentStudyDay);
-        currentStudyDay += interval;
-        interval *= 2; 
+      recommendedDays.add(currentStudyDay);
+      currentStudyDay += interval;
+      interval *= 2; 
     }
     if (diffDays > 1) {
-        recommendedDays.add(diffDays - 1);
+      recommendedDays.add(diffDays - 1);
     }
     if (diffDays > 2) {
-        recommendedDays.add(diffDays - 2);
+      recommendedDays.add(diffDays - 2);
     }
 
     let html = '<label style="font-size: 0.9em; margin-bottom: 5px; display: block;">Select study days (Spaced Repetition Schedule):</label><div style="max-height: 120px; overflow-y: auto; display: flex; flex-direction: column; gap: 5px;">';
@@ -1429,7 +1497,9 @@ function openEditSubtaskModal(subtaskId, creation=false) {
     if (user) {
       isSavingLocally = true;
       update(ref(db, `users/${user.uid}/tasks/${taskId}/subtasks/${subtaskId}`), { 
+        id: subtask.id,
         name: subtask.name, 
+        done: subtask.deleteTimeout ? false : !!subtask.done,
         deadline: subtask.deadline,
         cycle: subtask.cycle,
         study: subtask.study,
@@ -1444,7 +1514,7 @@ function openEditSubtaskModal(subtaskId, creation=false) {
 }
 
 function markStudied(taskId, subtaskId, dateStr) {
-  let subtask = state.tasks[taskId].subtasks[subtaskId];
+  let subtask = state.tasks[taskId]?.subtasks?.[subtaskId];
   if (!subtask || !subtask.studyDays) return;
   
   let studySession = subtask.studyDays.find(sd => sd.date === dateStr);
@@ -1465,8 +1535,25 @@ function markStudied(taskId, subtaskId, dateStr) {
 }
 
 function deleteSubtask(taskId, subtaskId) {
-  delete state.tasks[taskId].subtasks[subtaskId];
-  Save(true); RenderTasks();
+  const task = state.tasks[taskId];
+  if (task && task.subtasks) {
+    if (task.subtasks[subtaskId]?.deleteTimeout) {
+      clearTimeout(task.subtasks[subtaskId].deleteTimeout);
+    }
+    delete task.subtasks[subtaskId];
+  }
+  
+  const user = auth.currentUser;
+  if (user) {
+    isSavingLocally = true;
+    update(ref(db, `users/${user.uid}/tasks/${taskId}/subtasks`), {
+      [subtaskId]: null
+    });
+    Save(false);
+  } else {
+    Save(true);
+  }
+  RenderTasks();
 }
 
 function getHabitProgress(task, scaleId) {
@@ -1502,7 +1589,7 @@ function attachSubtaskDeadlineTooltips() {
       const taskId = el.dataset.taskId;
       const subtaskId = el.dataset.subtaskId;
       const task = state.tasks[taskId];
-      if (!task) return null;
+      if (!task || !task.subtasks) return null;
       const subtask = task.subtasks[subtaskId];
       if (!subtask) return null;
 
@@ -1547,7 +1634,7 @@ function RenderTasks() {
               </div>
               <div class="subtask-area" style="margin: 15px 0;">
                 <div class="task" style="text-align: center; cursor: pointer; padding: 5px; font-size: 0.9em; margin-bottom: 10px;" onclick="createNewSubtask('${sTaskId}')">+ New subtask</div>
-                ${Object.values(task.subtasks).sort((a, b) => {
+                ${Object.values(task.subtasks || {}).sort((a, b) => {
                   if (!a.deadline && b.deadline) return 1;
                   if (a.deadline && !b.deadline) return -1;
                   if (!a.deadline || !b.deadline)
@@ -1609,9 +1696,8 @@ function RenderTasks() {
                         <input type="checkbox" ${isChecked} onclick="toggleSubtask('${sTaskId}', '${sSubtaskId}')"> 
                         <span style="font-weight: 500; ${textStyle}">${subtask.name}</span>
                         <div style="display: flex; align-items: center; gap: 10px; margin-left: auto;">
-                              ${studyHtml}    
-                              ${dateHtml}
-                            
+                            ${studyHtml}    
+                            ${dateHtml}
                             <span style="cursor: pointer;" onclick="openEditSubtaskModal('${sSubtaskId}')">✏️</span>
                         </div>
                     </div>`
@@ -2016,7 +2102,7 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
     const totalTaskRequiredForDeadlineMs = getRequiredWorkByDeadlineMs(scaleEndMs);
     const currentFreeTimeMs = workableRemainingMs - totalTaskRequiredForDeadlineMs;
     const rawElapsedMs = Object.values(state.tasks).reduce((sum, task) => {
-    const elapsed = getProgressElapsed(task, scale.id);
+      const elapsed = getProgressElapsed(task, scale.id);
       const goal = getProgressGoal(task, scale.id);
       return sum + (Math.min(elapsed, goal) * 1000);
     }, 0);
@@ -2548,7 +2634,6 @@ const updatePreview = (startCellData, currentHoverData) => {
     const cellData = getDataFromCell(cell);
     const existingSlot = state.agenda[cellData.iso];
     const totalSecondsWorked = (existingSlot && existingSlot.tasksWorked) ? Object.values(existingSlot.tasksWorked).reduce((sum, val) => sum + val, 0) : 0;
-    const isToday = new Date(cellData.iso).toDateString() === new Date().toDateString();
     let bg;
     if (startCellData && currentHoverData) bg = getCellBgStyles(isinBox(cellData, startCellData, currentHoverData) ? !startCellData.busy : cellData.busy , totalSecondsWorked);
     else bg = getCellBgStyles(cellData.busy, totalSecondsWorked);
@@ -2849,7 +2934,6 @@ function checkTimeScaleDone() {
           start: new Date(scaleStartMs).toISOString(),
           tasks: Object.values(state.tasks).map((task) => {
             const elapsed = getRunningTaskElapsed(task, scaleStartMs, cycleEndMs, isFirstMissedCycle);
-            
             const rawElapsed = getRunningTaskRawElapsed(task, scaleStartMs, cycleEndMs, isFirstMissedCycle); 
 
             return { 
@@ -2990,7 +3074,6 @@ function streakLostAnimation(scaleId, lostStreak) {
   }, 5000);
 }
 
-
 function openTimeScaleStatistics(scaleId) {
   const scaleStats = Object.values(state.statistics)
     .filter(stat => isRealProgressStat(stat) && stat.scaleId === scaleId)
@@ -3086,7 +3169,7 @@ function openTimeScaleStatistics(scaleId) {
           transition: transform 0.1s; 
           position: relative; 
           min-width: 0; 
-          min-height: 0;
+          min-height: 0; 
           overflow: hidden; 
         }
         .heatmap-square:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0,0,0,0.3); z-index: 10; }
@@ -3460,9 +3543,7 @@ function giveUp() {
       Save(true);
       showGiveUpReminder();
       closeModal("modal");
-    }
-    else
-    {
+    } else {
       confirmationInput.style.animation = "shake 0.3s";
       setTimeout(() => {
         confirmationInput.style.animation = "";
