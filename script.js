@@ -564,6 +564,8 @@ function setupFirebaseListener() {
         lastTime = new Date().getTime();
         catchUpLocalAgenda();
         timerWorker.postMessage('start');
+      } else if (isRunningNow && wasRunning && wasRunning.id === isRunningNow.id) {
+        catchUpLocalAgenda();
       } else if (!isRunningNow && wasRunning) {
         document.body.classList.remove("active");
         timerWorker.postMessage('stop');
@@ -936,10 +938,19 @@ async function toggleTask(id, UITarget) {
   checkTimeScaleDone();
 
   timerWorker.postMessage('stop'); 
-  
+
+  let cleanAgenda = {};
+  Object.entries(state.agenda).forEach(([iso, item]) => {
+    const hasData = item.busy || (item.tasksWorked && Object.keys(item.tasksWorked).length > 0);
+    if (hasData) {
+      cleanAgenda[iso] = item;
+    }
+  });
+  state.agenda = cleanAgenda;
+
   if (task.running) {
     task.running = false;
-    document.body.classList.remove("active")
+    document.body.classList.remove("active");
     const user = auth.currentUser;
     if (user) {
       isSavingLocally = true;
@@ -959,7 +970,7 @@ async function toggleTask(id, UITarget) {
     UpdateTasksRender();
     RenderAgenda();
   } else {
-    document.body.classList.add("active")
+    document.body.classList.add("active");
     Object.values(state.tasks).forEach((t) => {
       if (t.running) {
         t.running = false;
