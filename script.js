@@ -1005,10 +1005,10 @@ async function toggleTask(id, UITarget) {
     }
 
     startTime = new Date().getTime();
-    startCounters = getTimerBaseline(task);
     lastTime = startTime;
     task.startedAt = startTime;
     task.lastTimerUpdateAt = startTime;
+    startCounters = getTimerBaseline(task);
 
     UpdateTasksRender();
     UpdateTimeScalesRender();
