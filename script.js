@@ -2025,23 +2025,50 @@ function getWorkableTimeBetween(startMs, endMs) {
 }
 
 function getRequiredWorkByDeadlineMs(targetEndMs) {
-  let totalRequiredMs = 0;
+  let immediateRequiredTotalMs = 0;
+  const taskImmediate = {};
+
   Object.values(state.tasks).forEach(task => {
-    let maxTaskRequiredForDeadlineMs = 0;
+    let maxImmediateForTask = 0;
     Object.values(state.timeScales).forEach(scale => {
       const scaleEndMs = new Date(scale.start).getTime() + (scale.duration * 24 * 60 * 60 * 1000);
-      const goal = getProgressGoal(task, scale.id);
-      const elapsed = getProgressElapsed(task, scale.id);
-      const remainingTaskMs = Math.max(0, (goal - elapsed) * 1000);
-
-      if (remainingTaskMs > 0) {
-        let requiredForTaskMs = scaleEndMs <= targetEndMs ? remainingTaskMs : Math.max(0, remainingTaskMs - getWorkableTimeBetween(targetEndMs, scaleEndMs));
-        if (requiredForTaskMs > maxTaskRequiredForDeadlineMs) maxTaskRequiredForDeadlineMs = requiredForTaskMs;
+      if (scaleEndMs <= targetEndMs) {
+        const goal = getProgressGoal(task, scale.id);
+        const elapsed = getProgressElapsed(task, scale.id);
+        const remaining = Math.max(0, (goal - elapsed) * 1000);
+        if (remaining > maxImmediateForTask) {
+          maxImmediateForTask = remaining;
+        }
       }
     });
-    totalRequiredMs += maxTaskRequiredForDeadlineMs;
+    taskImmediate[task.id] = maxImmediateForTask;
+    immediateRequiredTotalMs += maxImmediateForTask;
   });
-  return totalRequiredMs;
+
+  let maxSpilloverMs = 0;
+  Object.values(state.timeScales).forEach(scale => {
+    const scaleEndMs = new Date(scale.start).getTime() + (scale.duration * 24 * 60 * 60 * 1000);
+    if (scaleEndMs > targetEndMs) {
+      let futureWorkNeededForScale = 0;
+      Object.values(state.tasks).forEach(task => {
+        const goal = getProgressGoal(task, scale.id);
+        const elapsed = getProgressElapsed(task, scale.id);
+        const totalRemaining = Math.max(0, (goal - elapsed) * 1000);
+        
+        const futureRemaining = Math.max(0, totalRemaining - (taskImmediate[task.id] || 0));
+        futureWorkNeededForScale += futureRemaining;
+      });
+
+      const futureWorkable = getWorkableTimeBetween(targetEndMs, scaleEndMs);
+      const spillover = Math.max(0, futureWorkNeededForScale - futureWorkable);
+      
+      if (spillover > maxSpilloverMs) {
+        maxSpilloverMs = spillover;
+      }
+    }
+  });
+
+  return immediateRequiredTotalMs + maxSpilloverMs;
 }
 
 function UpdateTimeScalesRender(agendaData = state.agenda) {
