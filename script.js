@@ -3,6 +3,16 @@ import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.16.0/firebas
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
 import { getDatabase, ref, set, get, child, onValue, update as firebaseUpdate, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
 
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[character]);
+}
+
 const Tooltip = {
   el: null,
   init() {
@@ -1364,6 +1374,10 @@ function openEditSubtaskModal(subtaskId, creation=false) {
       <input type="text" id="modal-subtaskName" value="${subtask.name}">
     </div>
     <div class="form-group">
+      <label>Description</label>
+      <textarea id="modal-subtaskDescription" rows="7" resize="vertical">${escapeHtml(subtask.description || '')}</textarea>
+    </div>
+    <div class="form-group">
       <label>Deadline</label>
       <input type="date" id="modal-subtaskDeadline" value="${subtask.deadline ? getLocalYYYYMMDD(new Date(subtask.deadline)) : ''}">
     </div>
@@ -1476,6 +1490,7 @@ function openEditSubtaskModal(subtaskId, creation=false) {
   document.getElementById("btn-submit").innerText = creation ? "Create" : "Save Changes";
   document.getElementById("btn-submit").onclick = function() {
     const newName = document.getElementById("modal-subtaskName").value;
+    const newDescription = document.getElementById("modal-subtaskDescription").value;
     const newDeadline = deadlineInput.value;
     const isCycleChecked = document.getElementById("modal-subtaskCycle").checked;
     const cycleDays = parseInt(document.getElementById("modal-subtaskCycleDays").value, 10);
@@ -1499,6 +1514,7 @@ function openEditSubtaskModal(subtaskId, creation=false) {
     }
 
     subtask.name = newName;
+    subtask.description = newDescription;
     subtask.deadline = newDeadline ? new Date(newDeadline).toISOString() : null;
     subtask.cycle = isCycleChecked ? (isNaN(cycleDays) ? 1 : cycleDays) : null;
     subtask.study = isStudyChecked;
@@ -1510,6 +1526,7 @@ function openEditSubtaskModal(subtaskId, creation=false) {
       update(ref(db, `users/${user.uid}/tasks/${taskId}/subtasks/${subtaskId}`), { 
         id: subtask.id,
         name: subtask.name, 
+        description: subtask.description,
         done: subtask.deleteTimeout ? false : !!subtask.done,
         deadline: subtask.deadline,
         cycle: subtask.cycle,
@@ -1653,11 +1670,20 @@ function RenderTasks() {
                   return new Date(a.deadline) - new Date(b.deadline);
                 }).map((subtask) => {
                     const sSubtaskId = escapeStr(subtask.id);
+                    const description = typeof subtask.description === "string" ? subtask.description : "";
+                    const descriptionHtml = description.trim()
+                      ? `<span class="subtask-description">
+                          <span class="subtask-description-content">${escapeHtml(description)}</span>
+                        </span>`
+                      : "";
+                    const descriptionIndicatorHtml = description.trim()
+                      ? `<span class="subtask-description-indicator" role="img" aria-label="Description available">...</span>`
+                      : "";
                     let isChecked = subtask.done ? 'checked' : '';
                     let textStyle = subtask.done ? 'text-decoration: line-through; opacity: 0.6;' : '';
-                    let classname = "task";
+                    let classname = "task subtask-row";
                     if (subtask.done) {
-                        classname = subtask.cycle ? "task cycle-subtask-done" : "task subtask-done";
+                        classname = subtask.cycle ? "task subtask-row cycle-subtask-done" : "task subtask-row subtask-done";
                     }
                     
                     let dateHtml = '';
@@ -1705,7 +1731,13 @@ function RenderTasks() {
 
                     return `<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px; ${top_level_border_styles}" class="${classname}">
                         <input type="checkbox" ${isChecked} onclick="toggleSubtask('${sTaskId}', '${sSubtaskId}')"> 
-                        <span style="font-weight: 500; ${textStyle}">${subtask.name}</span>
+                        <span class="subtask-main">
+                            <span class="subtask-name-row">
+                                <span style="font-weight: 500; ${textStyle}">${subtask.name}</span>
+                                ${descriptionIndicatorHtml}
+                            </span>
+                            ${descriptionHtml}
+                        </span>
                         <div style="display: flex; align-items: center; gap: 10px; margin-left: auto;">
                             ${studyHtml}    
                             ${dateHtml}
