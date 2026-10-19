@@ -246,6 +246,16 @@ function getTimerBaseline(task) {
   return baseline;
 }
 
+function getAgendaRecordedAt(task, sessionStart) {
+  const agendaRecordedAt = Number(task.agendaRecordedAt);
+  if (Number.isFinite(agendaRecordedAt)) return agendaRecordedAt;
+
+  const lastTimerUpdateAt = Number(task.lastTimerUpdateAt);
+  return Number.isFinite(lastTimerUpdateAt) && lastTimerUpdateAt >= sessionStart
+    ? lastTimerUpdateAt
+    : sessionStart;
+}
+
 function getSafeIsoString(date) {
   return date.toISOString().split('.')[0] + 'Z';
 }
@@ -394,7 +404,7 @@ onAuthStateChanged(auth, async (user) => {
     document.body.classList.add("active");
     startTime = runningTask.startedAt || new Date().getTime();
     startCounters = getTimerBaseline(runningTask);
-    lastTime = new Date().getTime();
+    lastTime = getAgendaRecordedAt(runningTask, startTime);
     catchUpLocalAgenda();
     timerWorker.postMessage('start');
   } else {
@@ -571,7 +581,7 @@ function setupFirebaseListener() {
         document.body.classList.add("active");
         startTime = isRunningNow.startedAt || new Date().getTime();
         startCounters = getTimerBaseline(isRunningNow);
-        lastTime = new Date().getTime();
+        lastTime = getAgendaRecordedAt(isRunningNow, startTime);
         catchUpLocalAgenda();
         timerWorker.postMessage('start');
       } else if (isRunningNow && wasRunning && wasRunning.id === isRunningNow.id) {
@@ -736,7 +746,9 @@ function catchUpLocalAgenda() {
   if (!task || !startTime) return;
 
   let now = new Date().getTime();
-  let timeRemaining = now - startTime; 
+  let lastRecordedTime = Number(lastTime);
+  if (!Number.isFinite(lastRecordedTime)) lastRecordedTime = startTime;
+  let timeRemaining = Math.max(0, now - lastRecordedTime);
   let timeMarker = now;
 
   while (timeRemaining > 0) {
@@ -764,6 +776,9 @@ function catchUpLocalAgenda() {
     timeMarker -= timeInThisSlot;
     timeRemaining -= timeInThisSlot;
   }
+
+  lastTime = now;
+  task.agendaRecordedAt = now;
 }
 
 const timerWorker = new window.Worker('timerWorker.js');
@@ -777,6 +792,7 @@ timerWorker.onmessage = function(e) {
     let now = new Date().getTime();
     let elapsedTime = (now - startTime) / 1000;
     task.lastTimerUpdateAt = now;
+    task.agendaRecordedAt = now;
     deltaTime = now - lastTime;
     lastTime = now;
     
@@ -1018,6 +1034,7 @@ async function toggleTask(id, UITarget) {
     lastTime = startTime;
     task.startedAt = startTime;
     task.lastTimerUpdateAt = startTime;
+    task.agendaRecordedAt = startTime;
     startCounters = getTimerBaseline(task);
 
     UpdateTasksRender();
