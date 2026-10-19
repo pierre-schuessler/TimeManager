@@ -547,7 +547,8 @@ function setupFirebaseListener() {
       state.timeScales = incomingTimeScales;
 
       let incomingTasks = fbData.tasks || {};
-      Object.values(incomingTasks).forEach(task => {
+      Object.entries(incomingTasks).forEach(([taskId, task]) => {
+        if (!task.id) task.id = taskId;
         if (task.isHabit === undefined) task.isHabit = false;
         if (task.sessionDuration === undefined) task.sessionDuration = 1800;
         if (!task.times) task.times = {};
@@ -636,7 +637,8 @@ async function Load() {
   }
 
   state.tasks = rawData.tasks ? JSON.parse(rawData.tasks) : {};
-  Object.values(state.tasks).forEach(task => {
+  Object.entries(state.tasks).forEach(([taskId, task]) => {
+    if (!task.id) task.id = taskId;
     if (task.isHabit === undefined) task.isHabit = false;
     if (task.sessionDuration === undefined) task.sessionDuration = 1800;
     if (!task.times) task.times = {};
@@ -3019,12 +3021,12 @@ function checkTimeScaleDone() {
           goal: totals.goal,
           duration: scale.duration,
           start: new Date(scaleStartMs).toISOString(),
-          tasks: Object.values(state.tasks).map((task) => {
+          tasks: Object.entries(state.tasks).map(([taskId, task]) => {
             const elapsed = getRunningTaskElapsed(task, scaleStartMs, cycleEndMs, isFirstMissedCycle);
             const rawElapsed = getRunningTaskRawElapsed(task, scaleStartMs, cycleEndMs, isFirstMissedCycle); 
 
             return { 
-              id: task.id, 
+              id: task.id || taskId,
               name: task.name, 
               isHabit: task.isHabit,
               sessions: task.times[scale.id]?.sessions || 0,
