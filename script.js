@@ -689,16 +689,42 @@ async function Save(firebase = false) {
       return;
     };
     isSavingLocally = true; 
+    const sendSave = set(ref(db, `users/${user.uid}`), {
+      timeScales: state.timeScales,
+      tasks: cleanTasks,
+      agenda: state.agenda,
+      statistics: state.statistics
+    });
+    let timedOut = false;
+    let timeoutId;
+
+    sendSave.then(() => {
+      if (timedOut) clearFirebaseUpdateWarning();
+    }, (error) => {
+      if (timedOut) {
+        isSavingLocally = false;
+        console.error(error);
+        showFirebaseUpdateWarning("update-failed");
+      }
+    }).finally(() => clearTimeout(timeoutId));
+
+    const timeout = new Promise((_, reject) =>
+      timeoutId = setTimeout(() => {
+        timedOut = true;
+        reject(new Error("Save timed out"));
+      }, 1500)
+    );
+
     try {
-      await set(ref(db, `users/${user.uid}`), {
-        timeScales: state.timeScales,
-        tasks: cleanTasks,
-        agenda: state.agenda,
-        statistics: state.statistics
-      });
+      await Promise.race([sendSave, timeout]);
     } catch (error) {
-      isSavingLocally = false;
-      console.error(error);
+      if (error.message === "Save timed out") {
+        showFirebaseUpdateWarning("update-timeout");
+      } else {
+        isSavingLocally = false;
+        console.error(error);
+        showFirebaseUpdateWarning("update-failed");
+      }
     }
   } 
   
