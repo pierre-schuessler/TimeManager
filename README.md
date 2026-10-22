@@ -24,6 +24,7 @@ The app is organized around three main views:
    - Drag across the agenda to mark busy periods such as sleep, work, or appointments.
    - Automatically subtract busy time from the amount of usable time remaining in each scale.
    - See task work plotted on the same schedule for a clearer picture of how time is being spent.
+   - See at most one combined free-time limit per day, naming the scale goals that would become impossible without starting by that time.
 
 ## Additional features
 
@@ -65,4 +66,3 @@ The UI also includes a migration action to copy local data to the active Firebas
 - `script.js` — app state, rendering logic, task/time-scale behavior, agenda interactions, timer logic, and Firebase integration.
 - `timerWorker.js` — background timer worker used to keep elapsed work tracking accurate.
 - `ding.mp3` and `ring.mp3` — sound effects used for milestone and reminder notifications.
-
