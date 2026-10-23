@@ -2807,36 +2807,70 @@ window.setAgendaMode = (mode) => { agendaMode = mode; RenderAgenda(); };
 const SLOT_SECONDS = 15 * 60;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function applyWorkEdit(taskId, isos, add, deltaSec) {
+function getWorkEditCapacity(taskId, isos, add) {
+  return isos.reduce((total, iso) => {
+    const slot = state.agenda[iso];
+    const taskWork = Math.max(0, Number(slot?.tasksWorked?.[taskId]) || 0);
+    if (!add) return total + taskWork;
+
+    const totalWork = Object.values(slot?.tasksWorked || {}).reduce(
+      (sum, seconds) => sum + Math.max(0, Number(seconds) || 0),
+      0
+    );
+    return total + Math.max(0, SLOT_SECONDS - totalWork);
+  }, 0);
+}
+
+function applyWorkEdit(taskId, isos, add, deltaSec, agendaOnly = false) {
   const task = state.tasks[taskId];
   if (!task || !isos.length || !(deltaSec > 0)) return;
   const sign = add ? 1 : -1;
-  const share = deltaSec / isos.length;
+  let remaining = deltaSec;
+  const capacities = isos.map(iso => {
+    const slot = state.agenda[iso];
+    if (!add) return Math.max(0, Number(slot?.tasksWorked?.[taskId]) || 0);
+    const total = Object.values(slot?.tasksWorked || {}).reduce(
+      (sum, seconds) => sum + Math.max(0, Number(seconds) || 0),
+      0
+    );
+    return Math.max(0, SLOT_SECONDS - total);
+  });
+  const allocations = capacities.map(() => 0);
+  let activeIndices = capacities.map((capacity, index) => capacity > 0 ? index : -1).filter(index => index >= 0);
 
-  isos.forEach(iso => {
+  while (remaining > 0 && activeIndices.length) {
+    const share = remaining / activeIndices.length;
+    let allocated = 0;
+    activeIndices.forEach(index => {
+      const amount = Math.min(share, capacities[index] - allocations[index]);
+      allocations[index] += amount;
+      allocated += amount;
+    });
+    remaining -= allocated;
+    activeIndices = activeIndices.filter(index => capacities[index] - allocations[index] > 0);
+  }
+
+  const edits = isos.map((iso, index) => ({ iso, amount: allocations[index] })).filter(edit => edit.amount > 0);
+  edits.forEach(({ iso, amount }) => {
     const slot = state.agenda[iso] || (state.agenda[iso] = { iso, busy: false, tasksWorked: {} });
     if (!slot.tasksWorked) slot.tasksWorked = {};
-    const cur = slot.tasksWorked[taskId] || 0;
-    if (add) {
-      const total = Object.values(slot.tasksWorked).reduce((a, b) => a + b, 0);
-      const free = Math.max(0, SLOT_SECONDS - total);
-      slot.tasksWorked[taskId] = cur + Math.min(share, free);
-    } else {
-      slot.tasksWorked[taskId] = cur - Math.min(share, cur);
-    }
+    const current = Math.max(0, Number(slot.tasksWorked[taskId]) || 0);
+    slot.tasksWorked[taskId] = add ? current + amount : current - amount;
   });
+
+  if (agendaOnly) return;
 
   const realStats = Object.values(state.statistics).filter(isRealProgressStat);
   const statDelta = new Map();
 
-  isos.forEach(iso => {
+  edits.forEach(({ iso, amount }) => {
     const t = new Date(iso).getTime();
 
     Object.values(state.timeScales).forEach(scale => {
       const start = new Date(scale.start).getTime();
       if (t >= start && t < start + scale.duration * DAY_MS) {
         if (task.times[scale.id]) {
-          task.times[scale.id].elapsed = Math.max(0, Math.round((Number(task.times[scale.id].elapsed) || 0) + sign * share));
+          task.times[scale.id].elapsed = Math.max(0, Math.round((Number(task.times[scale.id].elapsed) || 0) + sign * amount));
         }
       }
     });
@@ -2844,7 +2878,7 @@ function applyWorkEdit(taskId, isos, add, deltaSec) {
     realStats.forEach(stat => {
       const start = new Date(stat.start).getTime();
       if (t >= start && t < start + (Number(stat.duration) || 0) * DAY_MS) {
-        statDelta.set(stat, (statDelta.get(stat) || 0) + sign * share);
+        statDelta.set(stat, (statDelta.get(stat) || 0) + sign * amount);
       }
     });
   });
@@ -2887,13 +2921,31 @@ function openWorkEditModal(isos) {
         <input type="number" id="work-edit-s" value="${s}" min="0" max="59" style="width: 55px;"> s
       </div>
       <p style="font-size: 0.85em; color: #666; margin: 6px 0 0;">
-        This exact amount is added to / removed from the task's elapsed time. The agenda is updated to match visually.
+        This amount updates the task's elapsed time and the agenda. Enable the option below to leave task times unchanged.
       </p>
+      <p id="work-edit-available" style="font-size: 0.85em; color: #777; margin: 6px 0 0;"></p>
+      <label style="display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 0.85em; color: #777;">
+        <input type="checkbox" id="work-edit-agenda-only">
+        Only update the agenda (leave task times unchanged)
+      </label>
     </div>
     <div class="form-group" id="warning-field-modal" style="display:none;">
       <p style="color: red;" id="warning-modal"></p>
     </div>
   `;
+
+  const updateAvailableWork = () => {
+    const taskId = document.getElementById("work-edit-task").value;
+    const add = document.querySelector('input[name="work-edit-action"]:checked').value === 'add';
+    const available = getWorkEditCapacity(taskId, isos, add);
+    document.getElementById("work-edit-available").innerText =
+      `Maximum ${add ? "available to add" : "work to remove"} for this task: ${formatDuration(available * 1000)}`;
+  };
+  document.getElementById("work-edit-task").addEventListener("change", updateAvailableWork);
+  document.querySelectorAll('input[name="work-edit-action"]').forEach(input => {
+    input.addEventListener("change", updateAvailableWork);
+  });
+  updateAvailableWork();
 
   document.getElementById("btn-submit").innerText = "Apply";
   document.getElementById("btn-submit").onclick = function () {
@@ -2903,6 +2955,7 @@ function openWorkEditModal(isos) {
       (parseInt(document.getElementById("work-edit-h").value) || 0) * 3600 +
       (parseInt(document.getElementById("work-edit-m").value) || 0) * 60 +
       (parseInt(document.getElementById("work-edit-s").value) || 0);
+    const agendaOnly = document.getElementById("work-edit-agenda-only").checked;
 
     const warn = (msg) => {
       document.getElementById("warning-modal").innerText = msg;
@@ -2910,9 +2963,13 @@ function openWorkEditModal(isos) {
     };
     if (state.tasks[taskId]?.running) { warn("Please stop this task before editing its work."); return; }
     if (delta <= 0) { warn("Please enter an amount greater than zero."); return; }
-    if (add && delta > isos.length * SLOT_SECONDS) { warn("You can't add more than 15 minutes per selected slot."); return; }
+    const available = getWorkEditCapacity(taskId, isos, add);
+    if (delta > available) {
+      warn(`You can only ${add ? "add" : "remove"} up to ${formatDuration(available * 1000)} for this task in the selected slots.`);
+      return;
+    }
 
-    applyWorkEdit(taskId, isos, add, delta);
+    applyWorkEdit(taskId, isos, add, delta, agendaOnly);
     Save(true);
     closeModal("modal");
     RenderTasks(); RenderTimeScales(); RenderAgenda();
