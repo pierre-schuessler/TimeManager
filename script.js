@@ -260,6 +260,22 @@ function getSafeIsoString(date) {
   return date.toISOString().split('.')[0] + 'Z';
 }
 
+function addCalendarDays(date, days) {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+function getCalendarDayStart(date) {
+  const result = new Date(date);
+  result.setHours(0, 0, 0, 0);
+  return result;
+}
+
+function getCalendarDurationEnd(start, durationDays) {
+  return addCalendarDays(new Date(start), Number(durationDays) || 0).getTime();
+}
+
 function isRealProgressStat(stat) {
   return !!stat && typeof stat === 'object' && stat.name !== 'User Gave Up';
 }
@@ -776,7 +792,8 @@ function catchUpLocalAgenda() {
   let now = new Date().getTime();
   let lastRecordedTime = Number(lastTime);
   if (!Number.isFinite(lastRecordedTime)) lastRecordedTime = startTime;
-  let timeRemaining = Math.max(0, now - lastRecordedTime);
+  lastRecordedTime = Math.max(startTime, Math.min(now, lastRecordedTime));
+  let timeRemaining = now - lastRecordedTime;
   let timeMarker = now;
 
   while (timeRemaining > 0) {
@@ -821,11 +838,16 @@ timerWorker.onmessage = function(e) {
     let elapsedTime = (now - startTime) / 1000;
     task.lastTimerUpdateAt = now;
     task.agendaRecordedAt = now;
-    deltaTime = now - lastTime;
+    const recordedAt = Number(lastTime);
+    const safeLastTime = Number.isFinite(recordedAt)
+      ? Math.max(startTime, Math.min(now, recordedAt))
+      : startTime;
+    deltaTime = now - safeLastTime;
     lastTime = now;
     
     let timeRemaining = deltaTime; 
     let timeMarker = now;
+    const changedAgendaIsos = new Set();
 
     while (timeRemaining > 0) {
       let markerDate = new Date(timeMarker);
@@ -848,11 +870,21 @@ timerWorker.onmessage = function(e) {
       
       let timeInThisSlotSeconds = timeInThisSlot / 1000;
       state.agenda[currentSlotIso].tasksWorked[task.id] = (state.agenda[currentSlotIso].tasksWorked[task.id] || 0) + timeInThisSlotSeconds;
+      changedAgendaIsos.add(currentSlotIso);
 
       timeMarker -= timeInThisSlot;
       timeRemaining -= timeInThisSlot;
-      updatePreview();
     }
+
+    changedAgendaIsos.forEach((iso) => {
+      const cell = document.querySelector(`.agenda-cell[data-iso="${iso}"]`);
+      if (!cell) return;
+      const agendaItem = state.agenda[iso];
+      const totalSecondsWorked = Object.values(agendaItem.tasksWorked || {}).reduce((sum, value) => sum + value, 0);
+      const bg = getCellBgStyles(agendaItem.busy, totalSecondsWorked);
+      cell.style.background = bg.background;
+      cell.style.backgroundColor = bg.backgroundColor;
+    });
 
     const wasAllCompleted = Object.values(state.timeScales).every(scale =>
       getProgressElapsed(task, scale.id) >= task.times[scale.id].goal
@@ -1010,6 +1042,8 @@ async function toggleTask(id, UITarget) {
       isSavingLocally = true;
       let updates = { 
         [`tasks/${task.id}/running`]: false,
+        [`tasks/${task.id}/lastTimerUpdateAt`]: task.lastTimerUpdateAt || Date.now(),
+        [`tasks/${task.id}/agendaRecordedAt`]: task.agendaRecordedAt || task.lastTimerUpdateAt || Date.now(),
         [`agenda`]: state.agenda
       };
       Object.keys(state.timeScales).forEach(scaleId => {
@@ -1033,6 +1067,8 @@ async function toggleTask(id, UITarget) {
           isSavingLocally = true;
           let updates = { 
             [`tasks/${t.id}/running`]: false,
+            [`tasks/${t.id}/lastTimerUpdateAt`]: t.lastTimerUpdateAt || Date.now(),
+            [`tasks/${t.id}/agendaRecordedAt`]: t.agendaRecordedAt || t.lastTimerUpdateAt || Date.now(),
             [`agenda`]: state.agenda
           };
           Object.keys(state.timeScales).forEach(scaleId => {
@@ -1054,7 +1090,9 @@ async function toggleTask(id, UITarget) {
       isSavingLocally = true;
       update(ref(db, `users/${user.uid}/tasks/${task.id}`), {
         running: true,
-        startedAt: serverTimestamp()
+        startedAt: serverTimestamp(),
+        lastTimerUpdateAt: serverTimestamp(),
+        agendaRecordedAt: serverTimestamp()
       });
     }
 
@@ -2040,7 +2078,7 @@ function RenderTimeScales(agendaData = state.agenda) {
             <div style="display:flex; gap: 10px; margin-top: 5px; flex-wrap: wrap; justify-content: space-between; align-items: center;">
             <div>Duration: ${scale.duration} day${scale.duration !== 1 ? "s" : ""}</div>
             <div>
-              ${scale.duration != 1 ? `<div>Start: ${new Date(scale.start).toLocaleDateString('en-GB')}</div><div>End: ${new Date(new Date(scale.start).getTime() + (scale.duration-1) * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB')}</div>` : `<div>Date: ${new Date(scale.start).toLocaleDateString('en-GB')}</div>`}
+              ${scale.duration != 1 ? `<div>Start: ${new Date(scale.start).toLocaleDateString('en-GB')}</div><div>End: ${addCalendarDays(new Date(scale.start), scale.duration - 1).toLocaleDateString('en-GB')}</div>` : `<div>Date: ${new Date(scale.start).toLocaleDateString('en-GB')}</div>`}
             </div>
             </div>
             <div class="time-scale-progress-section">
@@ -2108,7 +2146,7 @@ function getRequiredWorkByDeadlineMs(targetEndMs) {
   Object.values(state.tasks).forEach(task => {
     let maxImmediateForTask = 0;
     Object.values(state.timeScales).forEach(scale => {
-      const scaleEndMs = new Date(scale.start).getTime() + (scale.duration * 24 * 60 * 60 * 1000);
+      const scaleEndMs = getCalendarDurationEnd(scale.start, scale.duration);
       if (scaleEndMs <= targetEndMs) {
         const goal = getProgressGoal(task, scale.id);
         const elapsed = getProgressElapsed(task, scale.id);
@@ -2124,7 +2162,7 @@ function getRequiredWorkByDeadlineMs(targetEndMs) {
 
   let maxSpilloverMs = 0;
   Object.values(state.timeScales).forEach(scale => {
-    const scaleEndMs = new Date(scale.start).getTime() + (scale.duration * 24 * 60 * 60 * 1000);
+    const scaleEndMs = getCalendarDurationEnd(scale.start, scale.duration);
     if (scaleEndMs > targetEndMs) {
       let futureWorkNeededForScale = 0;
       Object.values(state.tasks).forEach(task => {
@@ -2196,9 +2234,9 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
     const currentTime = Date.now();
     const startTimeMs = new Date(scale.start).getTime() || currentTime;
     const durationDays = Number(scale.duration) || 0;
-    const rawTotalTimeMs = durationDays * 24 * 60 * 60 * 1000;
+    const scaleEndMs = getCalendarDurationEnd(scale.start, durationDays);
+    const rawTotalTimeMs = scaleEndMs - startTimeMs;
     const slotDurationMs = 15 * 60 * 1000;
-    const scaleEndMs = startTimeMs + rawTotalTimeMs;
 
     let totalExcludedTimeMs = 0; let passedExcludedTimeMs = 0;
     Object.values(agendaData).forEach(block => {
@@ -2407,9 +2445,12 @@ function updateCurrentTimeLine() {
 
   const freeTimeLimitColor = "#ff9800";
 
-  const agendaStartMs = new Date(table.querySelector("[data-iso]")?.dataset.iso).getTime();
+  const firstAgendaCell = table.querySelector("[data-iso]");
+  if (!firstAgendaCell) return;
+  const agendaStartDate = getCalendarDayStart(new Date(firstAgendaCell.dataset.iso));
+  const agendaStartMs = agendaStartDate.getTime();
   const agendaDays = table.querySelectorAll(".agenda-date-header").length;
-  const agendaEndMs = agendaStartMs + agendaDays * 24 * 60 * 60 * 1000;
+  const agendaEndMs = getCalendarDurationEnd(agendaStartDate, agendaDays);
   const nowMs = Date.now();
   const renderedLineKeys = new Set();
   container.querySelectorAll(".zero-free-time-line").forEach(line => {
@@ -2505,14 +2546,17 @@ function updateCurrentTimeLine() {
   const scaleCycles = [];
   Object.values(state.timeScales).forEach(scale => {
     const scaleStartMs = new Date(scale.start).getTime();
-    const cycleDurationMs = (Number(scale.duration) || 0) * 24 * 60 * 60 * 1000;
-    if (!Number.isFinite(scaleStartMs) || cycleDurationMs <= 0) return;
+    const cycleDurationDays = Number(scale.duration) || 0;
+    if (!Number.isFinite(scaleStartMs) || cycleDurationDays <= 0) return;
 
-    const firstCycleIndex = Math.max(0, Math.floor((agendaStartMs - scaleStartMs) / cycleDurationMs));
-    const firstCycleStartMs = scaleStartMs + firstCycleIndex * cycleDurationMs;
+    let cycleStartDate = new Date(scaleStartMs);
+    while (getCalendarDurationEnd(cycleStartDate, cycleDurationDays) <= agendaStartMs) {
+      cycleStartDate = addCalendarDays(cycleStartDate, cycleDurationDays);
+    }
 
-    for (let cycleStartMs = firstCycleStartMs; cycleStartMs < agendaEndMs; cycleStartMs += cycleDurationMs) {
-      const cycleEndMs = cycleStartMs + cycleDurationMs;
+    for (; cycleStartDate.getTime() < agendaEndMs; cycleStartDate = addCalendarDays(cycleStartDate, cycleDurationDays)) {
+      const cycleStartMs = cycleStartDate.getTime();
+      const cycleEndMs = getCalendarDurationEnd(cycleStartDate, cycleDurationDays);
       if (cycleEndMs <= agendaStartMs || cycleEndMs <= nowMs) continue;
 
       const cycleStats = Object.values(state.statistics).find(stat =>
@@ -2639,12 +2683,13 @@ function RenderAgenda() {
     return scaleStart < min ? scaleStart : min;
   }, Infinity);
 
-  const baseDate = new Date(earliestStart);
-  baseDate.setHours(0, 0, 0, 0);
-  baseDate.setDate(baseDate.getDate() + agendaOffsetDays);
+  const baseDate = addCalendarDays(getCalendarDayStart(new Date(earliestStart)), agendaOffsetDays);
 
-  const todayStr = new Date().toDateString();
-  const getTimestamp = (dayOffset, timeOffset) => baseDate.getTime() + (dayOffset * 24 * 60 * 60 * 1000) + (timeOffset * 15 * 60 * 1000);
+  const getTimestamp = (dayOffset, timeOffset) => {
+    const slotDate = addCalendarDays(baseDate, dayOffset);
+    slotDate.setMinutes(timeOffset * 15);
+    return slotDate.getTime();
+  };
 
   container.innerHTML = `
     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
@@ -2666,7 +2711,7 @@ function RenderAgenda() {
         const headerCells = ['<th class="agenda-top-left-empty"></th>'];
 
         for (let j = 0; j < longestScaleLengthDays; j++) {
-          const currentDate = new Date(baseDate.getTime() + j * 24 * 60 * 60 * 1000);
+          const currentDate = addCalendarDays(baseDate, j);
           headerCells.push(`<th class="agenda-date-header">${currentDate.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' })}</th>`);
         }
         html_output += `<tr>${headerCells.join("")}</tr>`;
@@ -2805,7 +2850,6 @@ let agendaMode = 'busy';
 window.setAgendaMode = (mode) => { agendaMode = mode; RenderAgenda(); };
 
 const SLOT_SECONDS = 15 * 60;
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 function getWorkEditCapacity(taskId, isos, add) {
   return isos.reduce((total, iso) => {
@@ -2868,7 +2912,7 @@ function applyWorkEdit(taskId, isos, add, deltaSec, agendaOnly = false) {
 
     Object.values(state.timeScales).forEach(scale => {
       const start = new Date(scale.start).getTime();
-      if (t >= start && t < start + scale.duration * DAY_MS) {
+      if (t >= start && t < getCalendarDurationEnd(scale.start, scale.duration)) {
         if (task.times[scale.id]) {
           task.times[scale.id].elapsed = Math.max(0, Math.round((Number(task.times[scale.id].elapsed) || 0) + sign * amount));
         }
@@ -2877,7 +2921,7 @@ function applyWorkEdit(taskId, isos, add, deltaSec, agendaOnly = false) {
 
     realStats.forEach(stat => {
       const start = new Date(stat.start).getTime();
-      if (t >= start && t < start + (Number(stat.duration) || 0) * DAY_MS) {
+      if (t >= start && t < getCalendarDurationEnd(stat.start, stat.duration)) {
         statDelta.set(stat, (statDelta.get(stat) || 0) + sign * amount);
       }
     });
@@ -3074,10 +3118,10 @@ function checkTimeScaleDone() {
   let runningTaskAfterCheck = null;
 
   Object.values(state.timeScales).forEach((scale) => {
-    const scaleDurationMs = scale.duration * 24 * 60 * 60 * 1000;
     let scaleStartMs = new Date(scale.start).getTime();
+    let scaleEndMs = getCalendarDurationEnd(new Date(scaleStartMs), scale.duration);
     
-    if (scaleStartMs + scaleDurationMs <= nowMs) {
+    if (scaleEndMs <= nowMs) {
       SomethingChanged = true;
       let isFirstMissedCycle = true;
       let missedThisCheck = false;
@@ -3122,8 +3166,8 @@ function checkTimeScaleDone() {
       };
       let completedRunningTaskElapsed = 0;
 
-      while (scaleStartMs + scaleDurationMs <= nowMs) {
-        const cycleEndMs = scaleStartMs + scaleDurationMs;
+      while (scaleEndMs <= nowMs) {
+        const cycleEndMs = scaleEndMs;
         const totals = Object.values(state.tasks).reduce((acc, task) => {
           const elapsed = getRunningTaskElapsed(task, scaleStartMs, cycleEndMs, isFirstMissedCycle);
           acc.elapsed += elapsed;
@@ -3165,7 +3209,8 @@ function checkTimeScaleDone() {
           })
         };
 
-        scaleStartMs += scaleDurationMs;
+        scaleStartMs = cycleEndMs;
+        scaleEndMs = getCalendarDurationEnd(new Date(scaleStartMs), scale.duration);
         isFirstMissedCycle = false;
       }
 
@@ -3453,8 +3498,8 @@ function openTimeScaleStatistics(scaleId) {
             let opacity = "1";
             if (stat.isPreview && currentScale && percentage < 100) {
               const scaleStartMs = new Date(currentScale.start).getTime();
-              const scaleDurationMs = (Number(currentScale.duration) || 0) * 24 * 60 * 60 * 1000;
-              const scaleEndMs = scaleStartMs + scaleDurationMs;
+              const scaleEndMs = getCalendarDurationEnd(currentScale.start, currentScale.duration);
+              const scaleDurationMs = scaleEndMs - scaleStartMs;
               const nowMs = Date.now();
               const slotDurationMs = 15 * 60 * 1000;
               let totalExcludedTimeMs = 0;
@@ -3604,7 +3649,7 @@ function openTimeScaleStatistics(scaleId) {
         let hue = (Math.min(100, Math.max(0, percentage)) / 100) * 120;
         
         const startStr = new Date(stat.start).toLocaleDateString('en-GB');
-        const endStr = new Date(new Date(stat.start).getTime() + (stat.duration-1) * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB');
+        const endStr = addCalendarDays(new Date(stat.start), stat.duration - 1).toLocaleDateString('en-GB');
         const dateRange = stat.duration === 1 ? startStr : `${startStr} - ${endStr}`;
 
         const tasksHtml = (stat.tasks || []).sort((a, b) => (b.rawElapsed / b.goal) - (a.rawElapsed / a.goal)).map(task => {
