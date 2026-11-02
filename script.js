@@ -2139,51 +2139,142 @@ function getWorkableTimeBetween(startMs, endMs, agendaData = state.agenda) {
   return Math.max(0, rawTimeMs - busyTimeMs);
 }
 
-function getRequiredWorkByDeadlineMs(targetEndMs, agendaData = state.agenda) {
-  let immediateRequiredTotalMs = 0;
-  const taskImmediate = {};
+function simulateWorkAllocation(agendaData = state.agenda, horizonMs = null) {
+  const nowMs = Date.now();
+  let allJobs = [];
+  let maxCycleEndMs = nowMs;
 
   Object.values(state.tasks).forEach(task => {
-    let maxImmediateForTask = 0;
-    Object.values(state.timeScales).forEach(scale => {
-      const scaleEndMs = getCalendarDurationEnd(scale.start, scale.duration);
-      if (scaleEndMs <= targetEndMs) {
-        const goal = getProgressGoal(task, scale.id);
-        const elapsed = getProgressElapsed(task, scale.id);
-        const remaining = Math.max(0, (goal - elapsed) * 1000);
-        if (remaining > maxImmediateForTask) {
-          maxImmediateForTask = remaining;
+    const scales = Object.values(state.timeScales).sort((a, b) => Number(a.duration) - Number(b.duration));
+    let allocByDate = {};
+
+    scales.forEach(scale => {
+      const scaleStartMs = new Date(scale.start).getTime();
+      const cycleDurationDays = Number(scale.duration) || 0;
+      if (!Number.isFinite(scaleStartMs) || cycleDurationDays <= 0) return;
+
+      let cycleStartDate = new Date(scaleStartMs);
+      while (getCalendarDurationEnd(cycleStartDate, cycleDurationDays) <= nowMs) {
+        cycleStartDate = addCalendarDays(cycleStartDate, cycleDurationDays);
+      }
+
+      let isCurrentCycle = true;
+      while (cycleStartDate.getTime() < (Number.isFinite(horizonMs) ? horizonMs : Infinity)) {
+        const cycleEndMs = getCalendarDurationEnd(cycleStartDate, cycleDurationDays);
+        if (cycleEndMs > maxCycleEndMs) maxCycleEndMs = cycleEndMs;
+
+        const goal = getProgressGoal(task, scale.id) * 1000;
+        const elapsed = isCurrentCycle ? getProgressElapsed(task, scale.id) * 1000 : 0;
+        const req = Math.max(0, goal - elapsed);
+
+        let covered = 0;
+        let d = new Date(cycleStartDate);
+        while (d.getTime() < cycleEndMs) {
+          const dStr = getLocalYYYYMMDD(d);
+          covered += allocByDate[dStr] || 0;
+          d = addCalendarDays(d, 1);
         }
+
+        const deficit = req - covered;
+        if (deficit > 0) {
+          const lastDay = addCalendarDays(new Date(cycleEndMs), -1);
+          const lastDayStr = getLocalYYYYMMDD(lastDay);
+          allocByDate[lastDayStr] = (allocByDate[lastDayStr] || 0) + deficit;
+
+          allJobs.push({
+            taskId: task.id,
+            scaleId: scale.id,
+            scaleName: scale.name,
+            cycleEndMs,
+            amountMs: deficit
+          });
+        }
+
+        cycleStartDate = addCalendarDays(cycleStartDate, cycleDurationDays);
+        isCurrentCycle = false;
+        if (!Number.isFinite(horizonMs)) break;
       }
     });
-    taskImmediate[task.id] = maxImmediateForTask;
-    immediateRequiredTotalMs += maxImmediateForTask;
   });
 
-  let maxSpilloverMs = 0;
-  Object.values(state.timeScales).forEach(scale => {
-    const scaleEndMs = getCalendarDurationEnd(scale.start, scale.duration);
-    if (scaleEndMs > targetEndMs) {
-      let futureWorkNeededForScale = 0;
-      Object.values(state.tasks).forEach(task => {
-        const goal = getProgressGoal(task, scale.id);
-        const elapsed = getProgressElapsed(task, scale.id);
-        const totalRemaining = Math.max(0, (goal - elapsed) * 1000);
-        
-        const futureRemaining = Math.max(0, totalRemaining - (taskImmediate[task.id] || 0));
-        futureWorkNeededForScale += futureRemaining;
-      });
+  let activeJobs = [];
+  let markers = [];
+  let timeMarker = maxCycleEndMs;
+  let requiredWorkTodayMs = 0;
+  const endOfTodayMs = new Date(new Date().setHours(23, 59, 59, 999)).getTime();
+  const startOfTodayMs = getCalendarDayStart(new Date()).getTime();
 
-      const futureWorkable = getWorkableTimeBetween(targetEndMs, scaleEndMs, agendaData);
-      const spillover = Math.max(0, futureWorkNeededForScale - futureWorkable);
-      
-      if (spillover > maxSpilloverMs) {
-        maxSpilloverMs = spillover;
+  while (timeMarker > nowMs) {
+    const markerDate = new Date(timeMarker);
+    const minutes = Math.floor(markerDate.getMinutes() / 15) * 15;
+    const slotStart = new Date(markerDate.getFullYear(), markerDate.getMonth(), markerDate.getDate(), markerDate.getHours(), minutes, 0, 0);
+    const slotStartTime = slotStart.getTime();
+
+    if (timeMarker === slotStartTime) {
+      timeMarker -= 1;
+      continue;
+    }
+
+    const slotEndTime = timeMarker;
+    const timeInThisSlot = slotEndTime - Math.max(slotStartTime, nowMs);
+
+    for (let i = allJobs.length - 1; i >= 0; i--) {
+      if (allJobs[i].cycleEndMs >= slotEndTime) {
+        activeJobs.push(allJobs[i]);
+        allJobs.splice(i, 1);
       }
     }
-  });
 
-  return immediateRequiredTotalMs + maxSpilloverMs;
+    const currentSlotIso = getSafeIsoString(slotStart);
+    const isBusy = agendaData[currentSlotIso]?.busy;
+
+    if (!isBusy) {
+      let C = timeInThisSlot;
+      while (C > 0 && activeJobs.length > 0) {
+        activeJobs.sort((a, b) => a.cycleEndMs - b.cycleEndMs);
+
+        let job = activeJobs[0];
+        let alloc = Math.min(C, job.amountMs);
+        job.amountMs -= alloc;
+        C -= alloc;
+
+        if (slotStartTime >= startOfTodayMs && slotEndTime <= endOfTodayMs) {
+          requiredWorkTodayMs += alloc;
+        }
+
+        if (job.amountMs <= 0) {
+          const limitTimeMs = slotEndTime - (timeInThisSlot - C);
+          markers.push({
+            limitTimeMs,
+            scaleName: job.scaleName,
+            cycleEndMs: job.cycleEndMs,
+            impossible: false
+          });
+          activeJobs.shift();
+        }
+      }
+    }
+    timeMarker -= timeInThisSlot;
+  }
+
+  for (let job of allJobs.concat(activeJobs)) {
+    if (job.amountMs > 0) {
+      markers.push({
+        limitTimeMs: nowMs,
+        scaleName: job.scaleName,
+        cycleEndMs: job.cycleEndMs,
+        impossible: true
+      });
+      requiredWorkTodayMs += job.amountMs;
+    }
+  }
+
+  return { markers, requiredWorkTodayMs };
+}
+
+function getRequiredWorkByDeadlineMs(targetEndMs, agendaData = state.agenda) {
+  const sim = simulateWorkAllocation(agendaData);
+  return sim.requiredWorkTodayMs;
 }
 
 function UpdateTimeScalesRender(agendaData = state.agenda) {
@@ -2450,7 +2541,7 @@ function updateCurrentTimeLine(agendaData = state.agenda) {
     line.dataset.limitTimeMs = String(Infinity);
   });
 
-  const renderFreeTimeLimit = (scaleNames, zeroTimeMs, cycleEndMs, isImpossible = false) => {
+  const renderFreeTimeLimit = (scaleNames, zeroTimeMs, cycleEndLabels, isImpossible = false) => {
     if (!zeroTimeMs || zeroTimeMs < agendaStartMs || zeroTimeMs >= agendaEndMs) return;
 
     const zeroDate = new Date(zeroTimeMs);
@@ -2490,12 +2581,12 @@ function updateCurrentTimeLine(agendaData = state.agenda) {
       const existingLimitTimeMs = Number(existingLine.dataset.limitTimeMs);
       if (zeroTimeMs > existingLimitTimeMs) return;
 
-      const cycleEndLabel = new Date(cycleEndMs).toLocaleDateString("en-GB");
+      const endDates = Array.isArray(cycleEndLabels) ? cycleEndLabels : [new Date(cycleEndLabels).toLocaleDateString("en-GB")];
       if (zeroTimeMs < existingLimitTimeMs) {
         existingLine.dataset.scaleNames = scaleNames.join("|");
-        existingLine.dataset.deadlineDates = cycleEndLabel;
+        existingLine.dataset.deadlineDates = endDates.join("|");
         existingLine.dataset.limitTimeMs = String(zeroTimeMs);
-        updateLineDescription(existingLine, scaleNames, [cycleEndLabel], isImpossible);
+        updateLineDescription(existingLine, scaleNames, endDates, isImpossible);
         existingLine.style.top = zExactY + "px";
         existingLine.style.left = (table.offsetLeft + zTargetCell.offsetLeft) + "px";
         existingLine.style.width = zTargetCell.offsetWidth + "px";
@@ -2504,10 +2595,12 @@ function updateCurrentTimeLine(agendaData = state.agenda) {
 
       const mergedScaleNames = [...new Set([...existingLine.dataset.scaleNames.split("|").filter(Boolean), ...scaleNames])];
       existingLine.dataset.scaleNames = mergedScaleNames.join("|");
-      const endDates = existingLine.dataset.deadlineDates.split("|").filter(Boolean);
-      if (!endDates.includes(cycleEndLabel)) endDates.push(cycleEndLabel);
-      existingLine.dataset.deadlineDates = endDates.join("|");
-      updateLineDescription(existingLine, mergedScaleNames, endDates, isImpossible || existingLine.dataset.impossible === "true");
+      const mergedEndDates = existingLine.dataset.deadlineDates.split("|").filter(Boolean);
+      endDates.forEach(endDate => {
+        if (!mergedEndDates.includes(endDate)) mergedEndDates.push(endDate);
+      });
+      existingLine.dataset.deadlineDates = mergedEndDates.join("|");
+      updateLineDescription(existingLine, mergedScaleNames, mergedEndDates, isImpossible || existingLine.dataset.impossible === "true");
       return;
     }
 
@@ -2517,9 +2610,9 @@ function updateCurrentTimeLine(agendaData = state.agenda) {
     zeroLine.dataset.scaleNames = scaleNames.join("|");
     zeroLine.dataset.impossible = "false";
     zeroLine.dataset.limitTimeMs = String(zeroTimeMs);
-    const cycleEndLabel = new Date(cycleEndMs).toLocaleDateString("en-GB");
-    zeroLine.dataset.deadlineDates = cycleEndLabel;
-    updateLineDescription(zeroLine, scaleNames, [cycleEndLabel], isImpossible);
+    const endDates = Array.isArray(cycleEndLabels) ? cycleEndLabels : [new Date(cycleEndLabels).toLocaleDateString("en-GB")];
+    zeroLine.dataset.deadlineDates = endDates.join("|");
+    updateLineDescription(zeroLine, scaleNames, endDates, isImpossible);
     zeroLine.style.position = "absolute";
     zeroLine.style.height = "2px";
     zeroLine.style.backgroundColor = freeTimeLimitColor;
@@ -2533,125 +2626,34 @@ function updateCurrentTimeLine(agendaData = state.agenda) {
     container.appendChild(zeroLine);
   };
 
-  const scaleCycles = [];
-  Object.values(state.timeScales).forEach(scale => {
-    const scaleStartMs = new Date(scale.start).getTime();
-    const cycleDurationDays = Number(scale.duration) || 0;
-    if (!Number.isFinite(scaleStartMs) || cycleDurationDays <= 0) return;
+  const simResult = simulateWorkAllocation(agendaData, agendaEndMs);
+  const markersByDate = {};
 
-    let cycleStartDate = new Date(scaleStartMs);
-    while (getCalendarDurationEnd(cycleStartDate, cycleDurationDays) <= agendaStartMs) {
-      cycleStartDate = addCalendarDays(cycleStartDate, cycleDurationDays);
-    }
-
-    for (; cycleStartDate.getTime() < agendaEndMs; cycleStartDate = addCalendarDays(cycleStartDate, cycleDurationDays)) {
-      const cycleStartMs = cycleStartDate.getTime();
-      const cycleEndMs = getCalendarDurationEnd(cycleStartDate, cycleDurationDays);
-      if (cycleEndMs <= agendaStartMs || cycleEndMs <= nowMs) continue;
-
-      const cycleStats = Object.values(state.statistics).find(stat =>
-        isRealProgressStat(stat) && stat.scaleId === scale.id && Math.abs(new Date(stat.start).getTime() - cycleStartMs) < 1000
-      );
-      const isCurrentCycle = nowMs >= cycleStartMs && nowMs < cycleEndMs;
-      const isCycleDone = Object.values(state.tasks).every(task => {
-        const goal = getProgressGoal(task, scale.id);
-        const elapsed = isCurrentCycle
-          ? getProgressElapsed(task, scale.id)
-          : cycleStats
-            ? Number((cycleStats.tasks || []).find(item => item.id === task.id)?.elapsed) || 0
-            : 0;
-        return elapsed >= goal;
-      });
-      if ((isCurrentCycle || cycleStats) && isCycleDone) continue;
-
-      const remainingByTask = new Map();
-      const goalByTask = new Map();
-      Object.values(state.tasks).forEach(task => {
-        const goal = getProgressGoal(task, scale.id);
-        const elapsed = isCurrentCycle
-          ? getProgressElapsed(task, scale.id)
-          : cycleStats
-            ? Number((cycleStats.tasks || []).find(item => item.id === task.id)?.elapsed) || 0
-            : 0;
-        goalByTask.set(task.id, goal * 1000);
-        remainingByTask.set(task.id, Math.max(0, (goal - elapsed) * 1000));
-      });
-
-      if (![...remainingByTask.values()].some(remainingMs => remainingMs > 0)) continue;
-      scaleCycles.push({ scale, cycleStartMs, cycleEndMs, remainingByTask, goalByTask });
+  simResult.markers.forEach(marker => {
+    const dateKey = getLocalYYYYMMDD(new Date(marker.limitTimeMs));
+    if (!markersByDate[dateKey]) {
+      markersByDate[dateKey] = {
+        limitTimeMs: marker.limitTimeMs,
+        scaleNames: new Set([marker.scaleName]),
+        cycleEndDates: new Set([getLocalYYYYMMDD(new Date(marker.cycleEndMs))]),
+        impossible: marker.impossible
+      };
+    } else {
+      const current = markersByDate[dateKey];
+      current.limitTimeMs = Math.min(current.limitTimeMs, marker.limitTimeMs);
+      current.scaleNames.add(marker.scaleName);
+      current.cycleEndDates.add(getLocalYYYYMMDD(new Date(marker.cycleEndMs)));
+      current.impossible = current.impossible || marker.impossible;
     }
   });
 
-  const cycleDeadlines = [...new Set(scaleCycles.map(cycle => cycle.cycleEndMs))].sort((a, b) => a - b);
-  cycleDeadlines.forEach(cycleEndMs => {
-    if (cycleEndMs <= nowMs) return;
-
-    const dueCycles = scaleCycles.filter(cycle => cycle.cycleEndMs === cycleEndMs);
-    if (dueCycles.length === 0) return;
-
-    let requiredWorkMs = 0;
-    const applicableScaleNames = new Set();
-    const workStartMs = Math.max(nowMs, Math.min(...dueCycles.map(cycle => cycle.cycleStartMs)));
-
-    Object.values(state.tasks).forEach(task => {
-      const getEffectiveRemaining = (cycle) => {
-        const priorShorterScaleCreditMs = scaleCycles
-          .filter(otherCycle =>
-            otherCycle.cycleEndMs < cycle.cycleEndMs &&
-            otherCycle.scale.duration < cycle.scale.duration
-          )
-          .reduce((sum, otherCycle) => sum + (otherCycle.goalByTask.get(task.id) || 0), 0);
-        return Math.max(
-          0,
-          (cycle.remainingByTask.get(task.id) || 0) - priorShorterScaleCreditMs
-        );
-      };
-      const requiredForTaskMs = Math.max(
-        0,
-        ...dueCycles.map(getEffectiveRemaining)
-      );
-      requiredWorkMs += requiredForTaskMs;
-      if (requiredForTaskMs > 0) {
-        dueCycles.forEach(cycle => {
-          if (getEffectiveRemaining(cycle) > 0) {
-            applicableScaleNames.add(cycle.scale.name);
-          }
-        });
-      }
-    });
-
-    if (requiredWorkMs <= 0) return;
-
-    let timeRemaining = requiredWorkMs;
-    let timeMarker = cycleEndMs;
-    while (timeRemaining > 0 && timeMarker > workStartMs) {
-      const markerDate = new Date(timeMarker);
-      const minutes = Math.floor(markerDate.getMinutes() / 15) * 15;
-      const slotStart = new Date(markerDate.getFullYear(), markerDate.getMonth(), markerDate.getDate(), markerDate.getHours(), minutes, 0, 0);
-      const slotStartTime = slotStart.getTime();
-
-      if (timeMarker === slotStartTime) {
-        timeMarker -= 1;
-        continue;
-      }
-
-      const timeInThisSlot = Math.min(timeMarker - slotStartTime, timeMarker - workStartMs);
-      const currentSlotIso = getSafeIsoString(slotStart);
-      const isBusy = agendaData[currentSlotIso]?.busy;
-      if (!isBusy) {
-        if (timeInThisSlot >= timeRemaining) {
-          renderFreeTimeLimit([...applicableScaleNames], timeMarker - timeRemaining, cycleEndMs);
-          timeRemaining = 0;
-        } else {
-          timeRemaining -= timeInThisSlot;
-        }
-      }
-      timeMarker -= timeInThisSlot;
-    }
-
-    if (timeRemaining > 0) {
-      renderFreeTimeLimit([...applicableScaleNames], workStartMs, cycleEndMs, true);
-    }
+  Object.values(markersByDate).forEach(marker => {
+    renderFreeTimeLimit(
+      Array.from(marker.scaleNames),
+      marker.limitTimeMs,
+      Array.from(marker.cycleEndDates).map(date => new Date(date).toLocaleDateString("en-GB")),
+      marker.impossible
+    );
   });
 
   container.querySelectorAll(".zero-free-time-line").forEach(line => {
