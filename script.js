@@ -762,7 +762,7 @@ function processDingQueue() {
   setTimeout(processDingQueue, (n * 300) + 1500);
 }
 function ding(n){ dingQueue.push(n); if (!isDinging) processDingQueue(); }
-function ring(){ new Audio('ring.mp3').play(); }
+function ring(){ new Audio('ring.mp3').play().catch(() => {}); }
 
 function createNewTask(){
   let times = {}
@@ -2121,13 +2121,13 @@ function toggleDetails(){
 
 let hasRungToday = false;
 
-function getWorkableTimeBetween(startMs, endMs) {
+function getWorkableTimeBetween(startMs, endMs, agendaData = state.agenda) {
   if (endMs <= startMs) return 0;
   const rawTimeMs = endMs - startMs;
   const slotDurationMs = 15 * 60 * 1000;
   let busyTimeMs = 0;
 
-  Object.values(state.agenda).forEach(block => {
+  Object.values(agendaData || {}).forEach(block => {
     if (block.busy && block.iso) {
       const blockStartMs = new Date(block.iso).getTime();
       const blockEndMs = blockStartMs + slotDurationMs;
@@ -2139,7 +2139,7 @@ function getWorkableTimeBetween(startMs, endMs) {
   return Math.max(0, rawTimeMs - busyTimeMs);
 }
 
-function getRequiredWorkByDeadlineMs(targetEndMs) {
+function getRequiredWorkByDeadlineMs(targetEndMs, agendaData = state.agenda) {
   let immediateRequiredTotalMs = 0;
   const taskImmediate = {};
 
@@ -2174,7 +2174,7 @@ function getRequiredWorkByDeadlineMs(targetEndMs) {
         futureWorkNeededForScale += futureRemaining;
       });
 
-      const futureWorkable = getWorkableTimeBetween(targetEndMs, scaleEndMs);
+      const futureWorkable = getWorkableTimeBetween(targetEndMs, scaleEndMs, agendaData);
       const spillover = Math.max(0, futureWorkNeededForScale - futureWorkable);
       
       if (spillover > maxSpilloverMs) {
@@ -2192,8 +2192,8 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
   const now = new Date();
   const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
 
-  const requiredWorkTodayMs = getRequiredWorkByDeadlineMs(endOfDay);
-  const todayWorkableRemainingMs = getWorkableTimeBetween(now.getTime(), endOfDay);
+  const requiredWorkTodayMs = getRequiredWorkByDeadlineMs(endOfDay, agendaData);
+  const todayWorkableRemainingMs = getWorkableTimeBetween(now.getTime(), endOfDay, agendaData);
   const freeTimeWarningThresholdMs = 5 * 60 * 1000;
   const isBehindSchedule = requiredWorkTodayMs > 0 && todayWorkableRemainingMs < requiredWorkTodayMs;
   const isLowFreeTimeWarning = requiredWorkTodayMs > 0 && (todayWorkableRemainingMs <= freeTimeWarningThresholdMs || isBehindSchedule);
@@ -2235,32 +2235,22 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
     const startTimeMs = new Date(scale.start).getTime() || currentTime;
     const durationDays = Number(scale.duration) || 0;
     const scaleEndMs = getCalendarDurationEnd(scale.start, durationDays);
-    const rawTotalTimeMs = scaleEndMs - startTimeMs;
-    const slotDurationMs = 15 * 60 * 1000;
-
-    let totalExcludedTimeMs = 0; let passedExcludedTimeMs = 0;
-    Object.values(agendaData).forEach(block => {
-      if (!block.iso || !block.busy) return;
-      const blockStartMs = new Date(block.iso).getTime();
-      if (blockStartMs >= startTimeMs && blockStartMs < scaleEndMs) {
-        totalExcludedTimeMs += slotDurationMs;
-        passedExcludedTimeMs += Math.max(0, Math.min(slotDurationMs, currentTime - blockStartMs));
-      }
-    });
-
-    const totalTimeMs = rawTotalTimeMs - totalExcludedTimeMs;
-    const rawTimeUsed = currentTime - startTimeMs;
-    const timeUsed = rawTimeUsed - passedExcludedTimeMs;
-    const workableRemainingMs = getWorkableTimeBetween(currentTime, scaleEndMs);
-    const totalTaskRequiredForDeadlineMs = getRequiredWorkByDeadlineMs(scaleEndMs);
-    const currentFreeTimeMs = workableRemainingMs - totalTaskRequiredForDeadlineMs;
+    const totalTimeMs = scaleEndMs - startTimeMs;
+    const elapsedTimeEndMs = Math.min(currentTime, scaleEndMs);
+    const timeUsed = Math.max(0, elapsedTimeEndMs - startTimeMs);
+    const scaleGoalMs = Object.values(state.tasks).reduce((sum, task) => {
+      return sum + getProgressGoal(task, scale.id) * 1000;
+    }, 0);
+    const totalWorkableMs = getWorkableTimeBetween(startTimeMs, scaleEndMs, agendaData);
     const rawElapsedMs = Object.values(state.tasks).reduce((sum, task) => {
       const elapsed = getProgressElapsed(task, scale.id);
       const goal = getProgressGoal(task, scale.id);
       return sum + (Math.min(elapsed, goal) * 1000);
     }, 0);
-    const freeTimeUsedMs = Math.max(0, timeUsed - rawElapsedMs);
-    const initialFreeTimeMs = currentFreeTimeMs + freeTimeUsedMs;
+    const workableTimeUsedMs = getWorkableTimeBetween(startTimeMs, elapsedTimeEndMs, agendaData);
+    const freeTimeUsedMs = Math.max(0, workableTimeUsedMs - rawElapsedMs);
+    const initialFreeTimeMs = Math.max(0, totalWorkableMs - scaleGoalMs);
+    const currentFreeTimeMs = Math.max(0, initialFreeTimeMs - freeTimeUsedMs);
     const freeTimeUsedPercentage = initialFreeTimeMs > 0 ? Math.min(100, Math.max(0, (freeTimeUsedMs / initialFreeTimeMs) * 100)) : (freeTimeUsedMs > 0 ? 100 : 0);
     const timePercentage = (totalTimeMs > 0 && !isNaN(timeUsed)) ? Math.min(100, Math.max(0, (timeUsed / totalTimeMs) * 100)) : 0;
 
@@ -2386,7 +2376,7 @@ const getCellBgStyles = (busy, totalSecondsWorked) => {
   return styles;
 };
 
-function updateCurrentTimeLine() {
+function updateCurrentTimeLine(agendaData = state.agenda) {
   const container = document.getElementById("root-agenda");
   const table = document.getElementById("agenda-table");
   if (!container || !table) return;
@@ -2575,6 +2565,7 @@ function updateCurrentTimeLine() {
       if ((isCurrentCycle || cycleStats) && isCycleDone) continue;
 
       const remainingByTask = new Map();
+      const goalByTask = new Map();
       Object.values(state.tasks).forEach(task => {
         const goal = getProgressGoal(task, scale.id);
         const elapsed = isCurrentCycle
@@ -2582,56 +2573,49 @@ function updateCurrentTimeLine() {
           : cycleStats
             ? Number((cycleStats.tasks || []).find(item => item.id === task.id)?.elapsed) || 0
             : 0;
+        goalByTask.set(task.id, goal * 1000);
         remainingByTask.set(task.id, Math.max(0, (goal - elapsed) * 1000));
       });
 
       if (![...remainingByTask.values()].some(remainingMs => remainingMs > 0)) continue;
-      scaleCycles.push({ scale, cycleStartMs, cycleEndMs, remainingByTask });
+      scaleCycles.push({ scale, cycleStartMs, cycleEndMs, remainingByTask, goalByTask });
     }
   });
 
-  const scaleIds = [...new Set(scaleCycles.map(cycle => cycle.scale.id))];
-  const scaleCyclesById = new Map(scaleIds.map(scaleId => [
-    scaleId,
-    scaleCycles.filter(cycle => cycle.scale.id === scaleId)
-  ]));
   const cycleDeadlines = [...new Set(scaleCycles.map(cycle => cycle.cycleEndMs))].sort((a, b) => a - b);
   cycleDeadlines.forEach(cycleEndMs => {
     if (cycleEndMs <= nowMs) return;
 
+    const dueCycles = scaleCycles.filter(cycle => cycle.cycleEndMs === cycleEndMs);
+    if (dueCycles.length === 0) return;
+
     let requiredWorkMs = 0;
     const applicableScaleNames = new Set();
-    const relevantCycles = scaleCycles.filter(cycle => cycle.cycleEndMs <= cycleEndMs);
-    if (relevantCycles.length === 0) return;
-    const workStartMs = Math.max(nowMs, Math.min(...relevantCycles.map(cycle => cycle.cycleStartMs)));
+    const workStartMs = Math.max(nowMs, Math.min(...dueCycles.map(cycle => cycle.cycleStartMs)));
 
     Object.values(state.tasks).forEach(task => {
-      const scaleRequirements = scaleIds.map(scaleId => {
-        const scaleCyclesForTask = scaleCyclesById.get(scaleId);
-        const scale = scaleCyclesForTask[0].scale;
-        const deadlines = [...new Set(scaleCyclesForTask.map(cycle => cycle.cycleEndMs))].sort((a, b) => a - b);
-        let requiredMs = 0;
-
-        deadlines.forEach(deadlineMs => {
-          const cyclesDue = scaleCyclesForTask.filter(cycle => cycle.cycleEndMs <= deadlineMs);
-          const remainingMs = cyclesDue.reduce((sum, cycle) => sum + (cycle.remainingByTask.get(task.id) || 0), 0);
-          const workableAfterLimitMs = deadlineMs <= cycleEndMs
-            ? 0
-            : cyclesDue.reduce((sum, cycle) => sum + getWorkableTimeBetween(
-              Math.max(cycleEndMs, cycle.cycleStartMs),
-              cycle.cycleEndMs
-            ), 0);
-          requiredMs = Math.max(requiredMs, remainingMs - workableAfterLimitMs);
-        });
-
-        return { scale, requiredMs: Math.max(0, requiredMs) };
-      });
-
-      const requiredForTaskMs = Math.max(0, ...scaleRequirements.map(requirement => requirement.requiredMs));
+      const getEffectiveRemaining = (cycle) => {
+        const priorShorterScaleCreditMs = scaleCycles
+          .filter(otherCycle =>
+            otherCycle.cycleEndMs < cycle.cycleEndMs &&
+            otherCycle.scale.duration < cycle.scale.duration
+          )
+          .reduce((sum, otherCycle) => sum + (otherCycle.goalByTask.get(task.id) || 0), 0);
+        return Math.max(
+          0,
+          (cycle.remainingByTask.get(task.id) || 0) - priorShorterScaleCreditMs
+        );
+      };
+      const requiredForTaskMs = Math.max(
+        0,
+        ...dueCycles.map(getEffectiveRemaining)
+      );
       requiredWorkMs += requiredForTaskMs;
       if (requiredForTaskMs > 0) {
-        scaleRequirements.forEach(({ scale, requiredMs }) => {
-          if (requiredMs === requiredForTaskMs) applicableScaleNames.add(scale.name);
+        dueCycles.forEach(cycle => {
+          if (getEffectiveRemaining(cycle) > 0) {
+            applicableScaleNames.add(cycle.scale.name);
+          }
         });
       }
     });
@@ -2653,7 +2637,7 @@ function updateCurrentTimeLine() {
 
       const timeInThisSlot = Math.min(timeMarker - slotStartTime, timeMarker - workStartMs);
       const currentSlotIso = getSafeIsoString(slotStart);
-      const isBusy = state.agenda[currentSlotIso]?.busy;
+      const isBusy = agendaData[currentSlotIso]?.busy;
       if (!isBusy) {
         if (timeInThisSlot >= timeRemaining) {
           renderFreeTimeLimit([...applicableScaleNames], timeMarker - timeRemaining, cycleEndMs);
