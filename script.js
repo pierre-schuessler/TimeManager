@@ -2296,6 +2296,47 @@ function simulateWorkAllocation(agendaData = state.agenda, horizonMs = null) {
     }
   }
 
+  // Keep missed work visible in the past as well as work that still needs to
+  // be scheduled in the future. This is based on the proportion of the
+  // current cycle that has elapsed, minus the work already completed.
+  Object.values(state.tasks).forEach(task => {
+    const scales = Object.values(state.timeScales).sort((a, b) => Number(a.duration) - Number(b.duration));
+
+    scales.forEach(scale => {
+      const scaleStartMs = new Date(scale.start).getTime();
+      const cycleDurationDays = Number(scale.duration) || 0;
+      if (!Number.isFinite(scaleStartMs) || cycleDurationDays <= 0) return;
+
+      let cycleStartDate = new Date(scaleStartMs);
+      while (getCalendarDurationEnd(cycleStartDate, cycleDurationDays) <= nowMs) {
+        cycleStartDate = addCalendarDays(cycleStartDate, cycleDurationDays);
+      }
+
+      const cycleStartMs = cycleStartDate.getTime();
+      const cycleEndMs = getCalendarDurationEnd(cycleStartDate, cycleDurationDays);
+      if (cycleStartMs >= nowMs || cycleEndMs <= cycleStartMs) return;
+
+      const goalMs = getProgressGoal(task, scale.id) * 1000;
+      const completedMs = getProgressElapsed(task, scale.id) * 1000;
+      const elapsedCycleRatio = Math.min(1, Math.max(0, (nowMs - cycleStartMs) / (cycleEndMs - cycleStartMs)));
+      const expectedByNowMs = goalMs * elapsedCycleRatio;
+      let overdueMs = Math.max(0, expectedByNowMs - completedMs);
+
+      for (let slotStartMs = Math.floor(nowMs / SLOT_SECONDS / 1000) * SLOT_SECONDS * 1000;
+           slotStartMs >= cycleStartMs && overdueMs > 0;
+           slotStartMs -= SLOT_SECONDS * 1000) {
+        const slot = new Date(slotStartMs);
+        const slotIso = getSafeIsoString(slot);
+        if (agendaData[slotIso]?.busy) continue;
+
+        const allocatedMs = Math.min(SLOT_SECONDS * 1000, overdueMs);
+        const existingRequiredMs = requiredSlotMs.get(slotIso) || 0;
+        requiredSlotMs.set(slotIso, Math.min(SLOT_SECONDS * 1000, existingRequiredMs + allocatedMs));
+        overdueMs -= allocatedMs;
+      }
+    });
+  });
+
   return { markers, requiredWorkTodayMs, requiredSlotMs };
 }
 
