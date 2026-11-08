@@ -2199,6 +2199,7 @@ function simulateWorkAllocation(agendaData = state.agenda, horizonMs = null) {
 
   let activeJobs = [];
   let markers = [];
+  let pendingCompletedJobs = [];
   let timeMarker = maxCycleEndMs;
   let requiredWorkTodayMs = 0;
   const endOfTodayMs = new Date(new Date().setHours(23, 59, 59, 999)).getTime();
@@ -2243,18 +2244,37 @@ function simulateWorkAllocation(agendaData = state.agenda, horizonMs = null) {
         }
 
         if (job.amountMs <= 0) {
-          const limitTimeMs = slotEndTime - (timeInThisSlot - C);
+          pendingCompletedJobs.push(job);
+          activeJobs.shift();
+        }
+      }
+
+      if (C > 0 && pendingCompletedJobs.length > 0) {
+        const limitTimeMs = slotEndTime - (timeInThisSlot - C);
+        pendingCompletedJobs.forEach(job => {
           markers.push({
             limitTimeMs,
             scaleName: job.scaleName,
             cycleEndMs: job.cycleEndMs,
             impossible: false
           });
-          activeJobs.shift();
-        }
+        });
+        pendingCompletedJobs = [];
       }
     }
     timeMarker -= timeInThisSlot;
+  }
+
+  
+  if (pendingCompletedJobs.length > 0) {
+    pendingCompletedJobs.forEach(job => {
+      markers.push({
+        limitTimeMs: nowMs,
+        scaleName: job.scaleName,
+        cycleEndMs: job.cycleEndMs,
+        impossible: false 
+      });
+    });
   }
 
   for (let job of allJobs.concat(activeJobs)) {
