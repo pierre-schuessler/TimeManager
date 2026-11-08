@@ -881,7 +881,8 @@ timerWorker.onmessage = function(e) {
       if (!cell) return;
       const agendaItem = state.agenda[iso];
       const totalSecondsWorked = Object.values(agendaItem.tasksWorked || {}).reduce((sum, value) => sum + value, 0);
-      const bg = getCellBgStyles(agendaItem.busy, totalSecondsWorked);
+      const requiredMs = window.currentRequiredSlots ? window.currentRequiredSlots.get(iso) || 0 : 0;
+      const bg = getCellBgStyles(agendaItem.busy, totalSecondsWorked, requiredMs);
       cell.style.background = bg.background;
       cell.style.backgroundColor = bg.backgroundColor;
     });
@@ -2200,6 +2201,7 @@ function simulateWorkAllocation(agendaData = state.agenda, horizonMs = null) {
   let activeJobs = [];
   let markers = [];
   let pendingCompletedJobs = [];
+  const requiredSlotMs = new Map();
   let timeMarker = maxCycleEndMs;
   let requiredWorkTodayMs = 0;
   const endOfTodayMs = new Date(new Date().setHours(23, 59, 59, 999)).getTime();
@@ -2249,6 +2251,11 @@ function simulateWorkAllocation(agendaData = state.agenda, horizonMs = null) {
         }
       }
 
+      const allocatedInSlot = timeInThisSlot - C;
+      if (allocatedInSlot > 0) {
+        requiredSlotMs.set(currentSlotIso, allocatedInSlot);
+      }
+
       if (C > 0 && pendingCompletedJobs.length > 0) {
         const limitTimeMs = slotEndTime - (timeInThisSlot - C);
         pendingCompletedJobs.forEach(job => {
@@ -2289,7 +2296,7 @@ function simulateWorkAllocation(agendaData = state.agenda, horizonMs = null) {
     }
   }
 
-  return { markers, requiredWorkTodayMs };
+  return { markers, requiredWorkTodayMs, requiredSlotMs };
 }
 
 function getRequiredWorkByDeadlineMs(targetEndMs, agendaData = state.agenda) {
@@ -2465,10 +2472,15 @@ function resetTimes(){
   Save(true); RenderTasks(); RenderTimeScales(); RenderAgenda();
 }
 
-const getCellBgStyles = (busy, totalSecondsWorked) => {
+const getCellBgStyles = (busy, totalSecondsWorked, requiredMs = 0) => {
   const hasWork = totalSecondsWorked > 0;
   const percent = hasWork ? Math.min(1, totalSecondsWorked / 900) : 0;
+  const requiredPercent = Math.min(100, Math.max(0, requiredMs / 900000 * 100));
   const greenColor = `rgb(76, 255, 80)`;
+  const requiredColor = `hsla(30, 100%, 50%, 0.51)`;
+  const requiredBackground = requiredPercent > 0
+    ? `linear-gradient(to top, ${requiredColor} 0%, ${requiredColor} ${requiredPercent}%, transparent ${requiredPercent}%, transparent 100%)`
+    : '';
   let styles = {};
 
   if (busy && hasWork) { 
@@ -2481,8 +2493,11 @@ const getCellBgStyles = (busy, totalSecondsWorked) => {
     styles = { background: bgStyle, backgroundColor: '' }; 
   }
   else if (busy) { styles = { background: '', backgroundColor: 'lightcoral' }; } 
-  else if (hasWork) { styles = { background: `linear-gradient(90deg, transparent 0%, transparent calc(50% - ${percent * 50}%), ${greenColor} calc(50% - ${percent * 50}%), ${greenColor} calc(50% + ${percent * 50}%), transparent calc(50% + ${percent * 50}%), transparent 100%)`, backgroundColor: '' }; } 
-  else { styles = { background: '', backgroundColor: 'transparent' }; }
+  else if (hasWork) {
+    const workBackground = `linear-gradient(90deg, transparent 0%, transparent calc(50% - ${percent * 50}%), ${greenColor} calc(50% - ${percent * 50}%), ${greenColor} calc(50% + ${percent * 50}%), transparent calc(50% + ${percent * 50}%), transparent 100%)`;
+    styles = { background: requiredBackground ? `${requiredBackground}, ${workBackground}` : workBackground, backgroundColor: 'transparent' };
+  }
+  else { styles = { background: requiredBackground, backgroundColor: 'transparent' }; }
   
   return styles;
 };
@@ -2559,6 +2574,20 @@ function updateCurrentTimeLine(agendaData = state.agenda) {
     line.dataset.deadlineDates = "";
     line.dataset.impossible = "false";
     line.dataset.limitTimeMs = String(Infinity);
+  });
+
+  const simResult = simulateWorkAllocation(agendaData, agendaEndMs);
+  window.currentRequiredSlots = simResult.requiredSlotMs;
+  container.querySelectorAll(".agenda-cell").forEach(cell => {
+    const iso = cell.dataset.iso;
+    const agendaItem = agendaData[iso];
+    const busy = agendaItem ? agendaItem.busy : false;
+    const totalSecondsWorked = agendaItem && agendaItem.tasksWorked
+      ? Object.values(agendaItem.tasksWorked).reduce((sum, value) => sum + value, 0)
+      : 0;
+    const bg = getCellBgStyles(busy, totalSecondsWorked, simResult.requiredSlotMs.get(iso) || 0);
+    if (cell.style.background !== bg.background) cell.style.background = bg.background;
+    if (cell.style.backgroundColor !== bg.backgroundColor) cell.style.backgroundColor = bg.backgroundColor;
   });
 
   const renderFreeTimeLimit = (scaleNames, zeroTimeMs, cycleEndLabels, isImpossible = false) => {
@@ -2639,14 +2668,12 @@ function updateCurrentTimeLine(agendaData = state.agenda) {
     zeroLine.style.pointerEvents = "auto";
     zeroLine.style.zIndex = "49";
     zeroLine.style.cursor = "help";
-    zeroLine.innerHTML = `<div style="width: 8px; height: 8px; background: ${freeTimeLimitColor}; border-radius: 50%; position: absolute; top: -3px; left: -4px;"></div>`;
     zeroLine.style.top = zExactY + "px";
     zeroLine.style.left = (table.offsetLeft + zTargetCell.offsetLeft) + "px";
     zeroLine.style.width = zTargetCell.offsetWidth + "px";
     container.appendChild(zeroLine);
   };
 
-  const simResult = simulateWorkAllocation(agendaData, agendaEndMs);
   const markersByDate = {};
 
   simResult.markers.forEach(marker => {
@@ -2738,7 +2765,8 @@ function RenderAgenda() {
               if (agendaItem.tasksWorked) totalSecondsWorked = Object.values(agendaItem.tasksWorked).reduce((sum, val) => sum + val, 0);
             }
             
-            const bg = getCellBgStyles(busy, totalSecondsWorked);
+            const requiredMs = window.currentRequiredSlots ? window.currentRequiredSlots.get(isoString) || 0 : 0;
+            const bg = getCellBgStyles(busy, totalSecondsWorked, requiredMs);
             let inlineStyleStr = bg.background ? `background: ${bg.background};` : `background-color: ${bg.backgroundColor};`;
             if (bg.borderLeft) inlineStyleStr += ` border-left: ${bg.borderLeft}; border-right:${bg.borderRight};`;
             
@@ -2839,17 +2867,8 @@ const isinBox = (target, side1, side2) => {
 }
 
 const updatePreview = (startCellData, currentHoverData) => {
-  updateCurrentTimeLine();
-  document.querySelectorAll('.agenda-cell').forEach(cell => {
-    const cellData = getDataFromCell(cell);
-    const existingSlot = state.agenda[cellData.iso];
-    const totalSecondsWorked = (existingSlot && existingSlot.tasksWorked) ? Object.values(existingSlot.tasksWorked).reduce((sum, val) => sum + val, 0) : 0;
-    let bg;
-    if (startCellData && currentHoverData) bg = getCellBgStyles(isinBox(cellData, startCellData, currentHoverData) ? !startCellData.busy : cellData.busy , totalSecondsWorked);
-    else bg = getCellBgStyles(cellData.busy, totalSecondsWorked);
-    cell.style.background = bg.background;
-    cell.style.backgroundColor = bg.backgroundColor;
-  });
+  const previewAgenda = (startCellData && currentHoverData) ? getPreviewAgenda(startCellData, currentHoverData) : state.agenda;
+  updateCurrentTimeLine(previewAgenda);
 };
 
 let agendaMode = 'busy';
