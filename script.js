@@ -2237,19 +2237,24 @@ function simulateWorkAllocation(agendaData = state.agenda, horizonMs = null) {
       while (C > 0 && activeJobs.length > 0) {
         activeJobs.sort((a, b) => a.cycleEndMs - b.cycleEndMs);
 
-        let job = activeJobs[0];
-        let alloc = Math.min(C, job.amountMs);
-        job.amountMs -= alloc;
+        let primaryJob = activeJobs[0];
+        let alloc = Math.min(C, primaryJob.amountMs);
+
+        let relatedJobs = activeJobs.filter(j => j.taskId === primaryJob.taskId);
+        relatedJobs.forEach(j => {
+          j.amountMs -= alloc;
+        });
+
         C -= alloc;
 
         if (slotStartTime >= startOfTodayMs && slotEndTime <= endOfTodayMs) {
           requiredWorkTodayMs += alloc;
         }
 
-        if (job.amountMs <= 0) {
-          pendingCompletedJobs.push(job);
-          activeJobs.shift();
-        }
+        let newlyCompleted = activeJobs.filter(j => j.amountMs <= 0);
+        newlyCompleted.forEach(job => pendingCompletedJobs.push(job));
+        
+        activeJobs = activeJobs.filter(j => j.amountMs > 0);
       }
 
       const allocatedInSlot = timeInThisSlot - C;
@@ -2285,25 +2290,26 @@ function simulateWorkAllocation(agendaData = state.agenda, horizonMs = null) {
   }
 
   let overflowJobs = [];
-  for (let job of allJobs.concat(activeJobs)) {
-    if (job.amountMs > 0) {
-      markers.push({
-        limitTimeMs: nowMs,
-        scaleName: job.scaleName,
-        cycleEndMs: job.cycleEndMs,
-        impossible: true
-      });
-      requiredWorkTodayMs += job.amountMs;
-      overflowJobs.push({
-        taskId: job.taskId,
-        scaleId: job.scaleId,
-        scaleName: job.scaleName,
-        cycleStartMs: job.cycleStartMs,
-        cycleEndMs: job.cycleEndMs,
-        amountMs: job.amountMs
-      });
+  const remainingJobs = allJobs.concat(activeJobs).filter(j => j.amountMs > 0);
+  
+  const taskOverflows = {};
+  for (let job of remainingJobs) {
+    markers.push({
+      limitTimeMs: nowMs,
+      scaleName: job.scaleName,
+      cycleEndMs: job.cycleEndMs,
+      impossible: true
+    });
+    
+    if (!taskOverflows[job.taskId] || job.amountMs > taskOverflows[job.taskId]) {
+      taskOverflows[job.taskId] = job.amountMs;
     }
+    overflowJobs.push(job);
   }
+
+  Object.values(taskOverflows).forEach(amount => {
+    requiredWorkTodayMs += amount;
+  });
 
   return { markers, requiredWorkTodayMs, requiredSlotMs, overflowJobs };
 }
@@ -2516,7 +2522,7 @@ function getPastRequiredSlots(agendaData, overflowJobs) {
   const pastRequiredSlotMs = new Map();
   if (!overflowJobs || overflowJobs.length === 0) return pastRequiredSlotMs;
 
-  let activeJobs = [...overflowJobs];
+  let activeJobs = overflowJobs.map(job => ({ ...job }));
   let timeMarker = nowMs;
   const earliestCycleStart = Math.min(...activeJobs.map(j => j.cycleStartMs));
 
@@ -2548,15 +2554,18 @@ function getPastRequiredSlots(agendaData, overflowJobs) {
       let allocatedInSlot = 0;
 
       while (capacity > 0 && activeJobs.length > 0) {
-        let job = activeJobs[0];
-        let alloc = Math.min(capacity, job.amountMs);
-        job.amountMs -= alloc;
+        let primaryJob = activeJobs[0];
+        let alloc = Math.min(capacity, primaryJob.amountMs);
+
+        let relatedJobs = activeJobs.filter(j => j.taskId === primaryJob.taskId);
+        relatedJobs.forEach(j => {
+          j.amountMs -= alloc;
+        });
+
         capacity -= alloc;
         allocatedInSlot += alloc;
 
-        if (job.amountMs <= 0) {
-          activeJobs.shift();
-        }
+        activeJobs = activeJobs.filter(j => j.amountMs > 0);
       }
 
       if (allocatedInSlot > 0) {
