@@ -2186,6 +2186,7 @@ function simulateWorkAllocation(agendaData = state.agenda, horizonMs = null) {
             taskId: task.id,
             scaleId: scale.id,
             scaleName: scale.name,
+            cycleStartMs: cycleStartDate.getTime(),
             cycleEndMs,
             amountMs: deficit
           });
@@ -2272,7 +2273,6 @@ function simulateWorkAllocation(agendaData = state.agenda, horizonMs = null) {
     timeMarker -= timeInThisSlot;
   }
 
-  
   if (pendingCompletedJobs.length > 0) {
     pendingCompletedJobs.forEach(job => {
       markers.push({
@@ -2284,6 +2284,7 @@ function simulateWorkAllocation(agendaData = state.agenda, horizonMs = null) {
     });
   }
 
+  let overflowJobs = [];
   for (let job of allJobs.concat(activeJobs)) {
     if (job.amountMs > 0) {
       markers.push({
@@ -2293,10 +2294,18 @@ function simulateWorkAllocation(agendaData = state.agenda, horizonMs = null) {
         impossible: true
       });
       requiredWorkTodayMs += job.amountMs;
+      overflowJobs.push({
+        taskId: job.taskId,
+        scaleId: job.scaleId,
+        scaleName: job.scaleName,
+        cycleStartMs: job.cycleStartMs,
+        cycleEndMs: job.cycleEndMs,
+        amountMs: job.amountMs
+      });
     }
   }
 
-  return { markers, requiredWorkTodayMs, requiredSlotMs };
+  return { markers, requiredWorkTodayMs, requiredSlotMs, overflowJobs };
 }
 
 function getRequiredWorkByDeadlineMs(targetEndMs, agendaData = state.agenda) {
@@ -2502,6 +2511,65 @@ const getCellBgStyles = (busy, totalSecondsWorked, requiredMs = 0) => {
   return styles;
 };
 
+function getPastRequiredSlots(agendaData, overflowJobs) {
+  const nowMs = Date.now();
+  const pastRequiredSlotMs = new Map();
+  if (!overflowJobs || overflowJobs.length === 0) return pastRequiredSlotMs;
+
+  let activeJobs = [...overflowJobs];
+  let timeMarker = nowMs;
+  const earliestCycleStart = Math.min(...activeJobs.map(j => j.cycleStartMs));
+
+  while (timeMarker > earliestCycleStart && activeJobs.length > 0) {
+    let markerDate = new Date(timeMarker);
+    let minutes = Math.floor(markerDate.getMinutes() / 15) * 15;
+    let slotStart = new Date(markerDate.getFullYear(), markerDate.getMonth(), markerDate.getDate(), markerDate.getHours(), minutes, 0, 0);
+    let slotStartTime = slotStart.getTime();
+
+    if (timeMarker === slotStartTime) { timeMarker -= 1; continue; }
+    
+    const slotEndTime = timeMarker;
+    const timeInThisSlot = slotEndTime - Math.max(slotStartTime, earliestCycleStart);
+
+    activeJobs = activeJobs.filter(job => job.cycleStartMs < slotEndTime);
+    if (activeJobs.length === 0) break;
+
+    let currentSlotIso = getSafeIsoString(slotStart);
+    let agendaItem = agendaData[currentSlotIso];
+    let isBusy = agendaItem ? agendaItem.busy : false;
+    
+    let workedInSlotMs = 0;
+    if (agendaItem && agendaItem.tasksWorked) {
+      workedInSlotMs = Object.values(agendaItem.tasksWorked).reduce((sum, val) => sum + val, 0) * 1000;
+    }
+
+    if (!isBusy) {
+      let capacity = Math.max(0, timeInThisSlot - workedInSlotMs);
+      let allocatedInSlot = 0;
+
+      while (capacity > 0 && activeJobs.length > 0) {
+        let job = activeJobs[0];
+        let alloc = Math.min(capacity, job.amountMs);
+        job.amountMs -= alloc;
+        capacity -= alloc;
+        allocatedInSlot += alloc;
+
+        if (job.amountMs <= 0) {
+          activeJobs.shift();
+        }
+      }
+
+      if (allocatedInSlot > 0) {
+        pastRequiredSlotMs.set(currentSlotIso, allocatedInSlot);
+      }
+    }
+    
+    timeMarker -= timeInThisSlot;
+  }
+  
+  return pastRequiredSlotMs;
+}
+
 function updateCurrentTimeLine(agendaData = state.agenda) {
   const container = document.getElementById("root-agenda");
   const table = document.getElementById("agenda-table");
@@ -2567,8 +2635,7 @@ function updateCurrentTimeLine(agendaData = state.agenda) {
   const agendaStartMs = agendaStartDate.getTime();
   const agendaDays = table.querySelectorAll(".agenda-date-header").length;
   const agendaEndMs = getCalendarDurationEnd(agendaStartDate, agendaDays);
-  const nowMs = Date.now();
-  const renderedLineKeys = new Set();
+  
   container.querySelectorAll(".zero-free-time-line").forEach(line => {
     line.dataset.scaleNames = "";
     line.dataset.deadlineDates = "";
@@ -2577,7 +2644,13 @@ function updateCurrentTimeLine(agendaData = state.agenda) {
   });
 
   const simResult = simulateWorkAllocation(agendaData, agendaEndMs);
+  const pastResult = getPastRequiredSlots(agendaData, simResult.overflowJobs);
+
+  pastResult.forEach((val, key) => {
+    simResult.requiredSlotMs.set(key, val);
+  });
   window.currentRequiredSlots = simResult.requiredSlotMs;
+
   container.querySelectorAll(".agenda-cell").forEach(cell => {
     const iso = cell.dataset.iso;
     const agendaItem = agendaData[iso];
@@ -2590,6 +2663,7 @@ function updateCurrentTimeLine(agendaData = state.agenda) {
     if (cell.style.backgroundColor !== bg.backgroundColor) cell.style.backgroundColor = bg.backgroundColor;
   });
 
+  const renderedLineKeys = new Set();
   const renderFreeTimeLimit = (scaleNames, zeroTimeMs, cycleEndLabels, isImpossible = false) => {
     if (!zeroTimeMs || zeroTimeMs < agendaStartMs || zeroTimeMs >= agendaEndMs) return;
 
