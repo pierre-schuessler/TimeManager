@@ -2447,7 +2447,12 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
           progressBarFill.style.left = "0%";
           const fillPercentage = remainingWorkMs === 0 ? 0 : (ratio === Infinity ? 100 : (ratio / (ratio + 1)) * 100);
           progressBarFill.style.width = `${fillPercentage}%`;
-          progressBarFill.style.backgroundColor = trueCurrentFreeTimeMs < 0 ? "darkred" : (ratio > 1 ? "orange" : "");
+          if (trueCurrentFreeTimeMs < 0) {
+            progressBarFill.style.backgroundColor = "darkred";
+          } else {
+            const hue = Math.max(0, 120 - (ratio * 60)); 
+            progressBarFill.style.backgroundColor = `hsl(${hue}, 100%, 45%)`;
+          }
           break;
         }
         case "Free time used":
