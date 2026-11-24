@@ -2091,6 +2091,10 @@ function RenderTimeScales(agendaData = state.agenda) {
                 <div class="time-scale-progress-meta"><span>Pace</span><span></span><span></span></div>
                 <div class="progress-bar"><div class="progress-bar-fill center-origin-fill positive" style="width: 0%;"></div></div>
               </div>
+              <div class="time-scale-progress-block detail" style="display: ${detailsDisplay};">
+                <div class="time-scale-progress-meta"><span>Needed pace to complete</span><span></span><span></span></div>
+                <div class="progress-bar"><div class="progress-bar-fill" style="width: 0%;"></div></div>
+              </div>
               <div class="time-scale-progress-block">
                 <div class="time-scale-progress-meta"><span>Free time used</span><span></span><span></span></div>
                 <div class="progress-bar"><div class="progress-bar-fill" style="width: 0%;"></div></div>
@@ -2418,6 +2422,32 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
           progressBarFill.style.backgroundColor = additionalElapsedNeededMs > 0 ? "orange" : additionalElapsedNeededMs < 0 ? "#2ecc71" : "";
           meta_info.children[1].textContent = `${Math.abs(additionalElapsedNeededMs) > 0 ? formatDuration(Math.abs(additionalElapsedNeededMs)) : "0s"}`;
           meta_info.children[2].textContent = `${additionalElapsedNeededMs >= 5* 60 * 1000 ? "Need to work" : additionalElapsedNeededMs <= -5 * 60 * 1000 ? "Ahead of pace" : "On track"}`;
+          break;
+        }
+        case "Needed pace to complete": {
+          const trueCurrentFreeTimeMs = initialFreeTimeMs - freeTimeUsedMs;
+          const remainingWorkMs = Math.max(0, scaleGoalMs - rawElapsedMs);
+          
+          let ratioStr = "0.00x";
+          let ratio = 0;
+          
+          if (remainingWorkMs === 0) {
+            ratioStr = "0.00x";
+            ratio = 0;
+          } else if (trueCurrentFreeTimeMs <= 0) {
+            ratioStr = "∞";
+            ratio = Infinity;
+          } else {
+            ratio = remainingWorkMs / trueCurrentFreeTimeMs;
+            ratioStr = `${ratio.toFixed(2)}x`;
+          }
+          meta_info.children[1].textContent = ratioStr;
+          const wiggleRoomStr = trueCurrentFreeTimeMs < 0 ? `-${formatDuration(Math.abs(trueCurrentFreeTimeMs))}` : formatDuration(trueCurrentFreeTimeMs);
+          meta_info.children[2].textContent = `${formatDuration(remainingWorkMs)}s work / ${wiggleRoomStr}s free time`;
+          progressBarFill.style.left = "0%";
+          const fillPercentage = remainingWorkMs === 0 ? 0 : (ratio === Infinity ? 100 : (ratio / (ratio + 1)) * 100);
+          progressBarFill.style.width = `${fillPercentage}%`;
+          progressBarFill.style.backgroundColor = trueCurrentFreeTimeMs < 0 ? "darkred" : (ratio > 1 ? "orange" : "");
           break;
         }
         case "Free time used":
