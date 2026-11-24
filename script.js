@@ -2428,6 +2428,8 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
           const trueCurrentFreeTimeMs = initialFreeTimeMs - freeTimeUsedMs;
           const remainingWorkMs = Math.max(0, scaleGoalMs - rawElapsedMs);
           
+          const baselineRatio = initialFreeTimeMs > 0 ? (scaleGoalMs / initialFreeTimeMs) : 0;
+          
           let ratioStr = "0.00x";
           let ratio = 0;
           
@@ -2441,17 +2443,27 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
             ratio = remainingWorkMs / trueCurrentFreeTimeMs;
             ratioStr = `${ratio.toFixed(2)}x`;
           }
+          
           meta_info.children[1].textContent = ratioStr;
+          
           const wiggleRoomStr = trueCurrentFreeTimeMs < 0 ? `-${formatDuration(Math.abs(trueCurrentFreeTimeMs))}` : formatDuration(trueCurrentFreeTimeMs);
-          meta_info.children[2].textContent = `${formatDuration(remainingWorkMs)}s work / ${wiggleRoomStr}s free time`;
+          meta_info.children[2].textContent = `${formatDuration(remainingWorkMs)} work / ${wiggleRoomStr} free time left`;
+          
+          progressBarFill.style.transition = "width 0.3s ease, background-color 0.3s ease";
+          
           progressBarFill.style.left = "0%";
           const fillPercentage = remainingWorkMs === 0 ? 0 : (ratio === Infinity ? 100 : (ratio / (ratio + 1)) * 100);
           progressBarFill.style.width = `${fillPercentage}%`;
+          
           if (trueCurrentFreeTimeMs < 0) {
             progressBarFill.style.backgroundColor = "darkred";
-          } else {
-            const hue = Math.max(0, 120 - (ratio * 60)); 
+          } else if (baselineRatio > 0) {
+            const relativeRatio = ratio / baselineRatio;
+            const hueDrop = Math.max(0, relativeRatio - 1) * 60;
+            const hue = Math.max(0, 120 - hueDrop);
             progressBarFill.style.backgroundColor = `hsl(${hue}, 100%, 45%)`;
+          } else {
+             progressBarFill.style.backgroundColor = `hsl(120, 100%, 45%)`;
           }
           break;
         }
