@@ -2425,6 +2425,7 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
           break;
         }
         case "Needed pace to complete": {
+          const DEFAULT_GREEN_HUE = 80;
           const trueCurrentFreeTimeMs = initialFreeTimeMs - freeTimeUsedMs;
           const remainingWorkMs = Math.max(0, scaleGoalMs - rawElapsedMs);
           const baselineRatio = initialFreeTimeMs > 0 ? (scaleGoalMs / initialFreeTimeMs) : 0;
@@ -2458,12 +2459,12 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
             progressBarFill.style.backgroundColor = "darkred";
           } else if (baselineRatio > 0) {
             const relativeRatio = ratio / baselineRatio;
-            const hueDrop = Math.max(0, relativeRatio - 1) * 50;
-            const hue = Math.max(0, 100 - hueDrop);
+            const hueDrop = Math.max(0, relativeRatio - 1) * (DEFAULT_GREEN_HUE/2);
+            const hue = Math.max(0, DEFAULT_GREEN_HUE - hueDrop);
             
             progressBarFill.style.backgroundColor = `hsl(${hue}, 100%, 45%)`;
           } else {
-            progressBarFill.style.backgroundColor = `hsl(100, 100%, 45%)`;
+            progressBarFill.style.backgroundColor = `hsl(DEFAULT_GREEN_HUE, 100%, 45%)`;
           }
           break;
         }
