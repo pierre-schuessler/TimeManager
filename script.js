@@ -2427,7 +2427,6 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
         case "Needed pace to complete": {
           const trueCurrentFreeTimeMs = initialFreeTimeMs - freeTimeUsedMs;
           const remainingWorkMs = Math.max(0, scaleGoalMs - rawElapsedMs);
-          
           const baselineRatio = initialFreeTimeMs > 0 ? (scaleGoalMs / initialFreeTimeMs) : 0;
           
           let ratioStr = "0.00x";
@@ -2450,8 +2449,8 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
           meta_info.children[2].textContent = `${formatDuration(remainingWorkMs)} work / ${wiggleRoomStr} free time left`;
           
           progressBarFill.style.transition = "width 0.3s ease, background-color 0.3s ease";
-          
           progressBarFill.style.left = "0%";
+          
           const fillPercentage = remainingWorkMs === 0 ? 0 : (ratio === Infinity ? 100 : (ratio / (ratio + 1)) * 100);
           progressBarFill.style.width = `${fillPercentage}%`;
           
@@ -2459,11 +2458,12 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
             progressBarFill.style.backgroundColor = "darkred";
           } else if (baselineRatio > 0) {
             const relativeRatio = ratio / baselineRatio;
-            const hueDrop = Math.max(0, relativeRatio - 1) * 60;
-            const hue = Math.max(0, 120 - hueDrop);
+            const hueDrop = Math.max(0, relativeRatio - 1) * 50;
+            const hue = Math.max(0, 100 - hueDrop);
+            
             progressBarFill.style.backgroundColor = `hsl(${hue}, 100%, 45%)`;
           } else {
-             progressBarFill.style.backgroundColor = `hsl(120, 100%, 45%)`;
+            progressBarFill.style.backgroundColor = `hsl(100, 100%, 45%)`;
           }
           break;
         }
