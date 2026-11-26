@@ -2319,6 +2319,32 @@ function simulateWorkAllocation(agendaData = state.agenda, horizonMs = null, onl
 
   return { markers, requiredWorkTodayMs, requiredSlotMs, overflowJobs };
 }
+
+function debugAgendaFree(scaleName) {
+  const scale = Object.values(state.timeScales).find(s => s.name === scaleName);
+  const now = Date.now();
+  const end = getCalendarDurationEnd(scale.start, scale.duration);
+  const slot = 15 * 60 * 1000;
+  let workable = 0, orange = 0, white = 0;
+
+  document.querySelectorAll('.agenda-cell').forEach(cell => {
+    const iso = cell.dataset.iso;
+    const s = new Date(iso).getTime();
+    const from = Math.max(s, now), to = Math.min(s + slot, end);
+    if (to <= from) return;                       // past, or after the scale ends
+    if (state.agenda[iso]?.busy) return;          // red
+    const avail = to - from;
+    const req = Math.min(window.currentRequiredSlots?.get(iso) || 0, avail);
+    workable += avail; orange += req; white += avail - req;
+  });
+
+  console.log(scaleName, {
+    workable: formatDuration(workable),
+    orange: formatDuration(orange),
+    white: formatDuration(white)
+  });
+}
+
 function getScaleFreeTimeMs(scale, agendaData = state.agenda) {
   const now = Date.now();
   const end = getCalendarDurationEnd(scale.start, scale.duration);
@@ -2341,7 +2367,7 @@ function getScaleFreeTimeMs(scale, agendaData = state.agenda) {
     required: formatDuration(required),
     free: formatDuration(workable - required)
   });
-
+  debugAgendaFree("Weekly")
   return getWorkableTimeBetween(now, end, agendaData) - required;
 }
 
