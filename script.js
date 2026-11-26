@@ -2064,7 +2064,7 @@ function RenderTimeScales(agendaData = state.agenda) {
           streakClass += " completed";
         }
         return `
-          <div class="time-scale">
+          <div class="time-scale" data-scale-id="${scale.id}">
             <div class="time-scale-header" style="display: flex; align-items: center; gap: 8px;">
               <h3 style="margin: 0;">${scale.name}</h3>
               <div class="streak-badge ${streakClass}" style="margin-right: auto; transform: scale(0.75); transform-origin: left center;">
@@ -2144,13 +2144,15 @@ function getWorkableTimeBetween(startMs, endMs, agendaData = state.agenda) {
   return Math.max(0, rawTimeMs - busyTimeMs);
 }
 
-function simulateWorkAllocation(agendaData = state.agenda, horizonMs = null) {
+function simulateWorkAllocation(agendaData = state.agenda, horizonMs = null, onlyScaleId = null) {
   const nowMs = Date.now();
   let allJobs = [];
   let maxCycleEndMs = nowMs;
 
   Object.values(state.tasks).forEach(task => {
-    const scales = Object.values(state.timeScales).sort((a, b) => Number(a.duration) - Number(b.duration));
+    const scales = Object.values(state.timeScales)
+      .filter(s => !onlyScaleId || s.id === onlyScaleId)
+      .sort((a, b) => Number(a.duration) - Number(b.duration));
     let allocByDate = {};
 
     scales.forEach(scale => {
@@ -2257,7 +2259,7 @@ function simulateWorkAllocation(agendaData = state.agenda, horizonMs = null) {
 
         let newlyCompleted = activeJobs.filter(j => j.amountMs <= 0);
         newlyCompleted.forEach(job => pendingCompletedJobs.push(job));
-        
+
         activeJobs = activeJobs.filter(j => j.amountMs > 0);
       }
 
@@ -2288,14 +2290,14 @@ function simulateWorkAllocation(agendaData = state.agenda, horizonMs = null) {
         limitTimeMs: nowMs,
         scaleName: job.scaleName,
         cycleEndMs: job.cycleEndMs,
-        impossible: false 
+        impossible: false
       });
     });
   }
 
   let overflowJobs = [];
   const remainingJobs = allJobs.concat(activeJobs).filter(j => j.amountMs > 0);
-  
+
   const taskOverflows = {};
   for (let job of remainingJobs) {
     markers.push({
@@ -2304,7 +2306,7 @@ function simulateWorkAllocation(agendaData = state.agenda, horizonMs = null) {
       cycleEndMs: job.cycleEndMs,
       impossible: true
     });
-    
+
     if (!taskOverflows[job.taskId] || job.amountMs > taskOverflows[job.taskId]) {
       taskOverflows[job.taskId] = job.amountMs;
     }
@@ -2316,6 +2318,24 @@ function simulateWorkAllocation(agendaData = state.agenda, horizonMs = null) {
   });
 
   return { markers, requiredWorkTodayMs, requiredSlotMs, overflowJobs };
+}
+function getScaleFreeTimeMs(scale, agendaData = state.agenda) {
+  const now = Date.now();
+  const end = getCalendarDurationEnd(scale.start, scale.duration);
+  if (end <= now) return 0;
+
+  const sim = simulateWorkAllocation(agendaData, null, scale.id);
+
+  let required = 0;
+  sim.requiredSlotMs.forEach(ms => { required += ms; });
+
+  const overflowByTask = {};
+  sim.overflowJobs.forEach(j => {
+    overflowByTask[j.taskId] = Math.max(overflowByTask[j.taskId] || 0, j.amountMs);
+  });
+  required += Object.values(overflowByTask).reduce((a, b) => a + b, 0);
+
+  return getWorkableTimeBetween(now, end, agendaData) - required;
 }
 
 function getRequiredWorkByDeadlineMs(targetEndMs, agendaData = state.agenda) {
@@ -2352,14 +2372,12 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
   }
 
   timeScaleContainers.forEach((timeScaleContainer) => {
-    let header = timeScaleContainer.querySelector(".time-scale-header > h3");
-    if (!header) return;
-
-    let scale = Object.values(state.timeScales).find((s) => s.name === header.textContent);
+    const scaleId = timeScaleContainer.dataset.scaleId;
+    if (!scaleId) return;
+    const scale = state.timeScales[scaleId];
     if (!scale) return;
 
     const totals = Object.values(state.tasks).reduce((acc, task) => {
-      const time = task.times[scale.id];
       const goal = getProgressGoal(task, scale.id);
       const elapsed = getProgressElapsed(task, scale.id);
       acc.elapsed += Math.min(elapsed, goal);
@@ -2384,11 +2402,14 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
       const goal = getProgressGoal(task, scale.id);
       return sum + (Math.min(elapsed, goal) * 1000);
     }, 0);
-    const workableTimeUsedMs = getWorkableTimeBetween(startTimeMs, elapsedTimeEndMs, agendaData);
-    const freeTimeUsedMs = Math.max(0, workableTimeUsedMs - rawElapsedMs);
-    const initialFreeTimeMs = Math.max(0, totalWorkableMs - scaleGoalMs);
-    const currentFreeTimeMs = Math.max(0, initialFreeTimeMs - freeTimeUsedMs);
-    const freeTimeUsedPercentage = initialFreeTimeMs > 0 ? Math.min(100, Math.max(0, (freeTimeUsedMs / initialFreeTimeMs) * 100)) : (freeTimeUsedMs > 0 ? 100 : 0);
+
+    
+    const initialFreeTimeMs = totalWorkableMs - scaleGoalMs;            // may be negative
+    const currentFreeTimeMs = getScaleFreeTimeMs(scale, agendaData);    // may be negative
+    const freeTimeUsedMs = initialFreeTimeMs - currentFreeTimeMs;       // may be negative
+    const freeTimeUsedPercentage = initialFreeTimeMs > 0
+      ? Math.min(100, Math.max(0, (freeTimeUsedMs / initialFreeTimeMs) * 100))
+      : (freeTimeUsedMs > 0 ? 100 : 0);
     const timePercentage = (totalTimeMs > 0 && !isNaN(timeUsed)) ? Math.min(100, Math.max(0, (timeUsed / totalTimeMs) * 100)) : 0;
 
     const requiredElapsedForFreeTimePercentage = (freeTimeUsedPercentage / 100) * totals.goal;
@@ -2402,7 +2423,7 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
       let label = meta_info.children[0].textContent.trim();
 
       switch (label) {
-        case "Tasks":
+        case "Tasks": {
           const displayedElapsed = Math.floor(totals.elapsed);
           const displayedRemaining = Math.max(0, totals.goal - displayedElapsed);
           meta_info.children[1].textContent = `${taskPercentage.toFixed(1)}%`;
@@ -2411,6 +2432,7 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
           progressBarFill.style.width = `${Math.min(100, taskPercentage)}%`;
           progressBarFill.style.backgroundColor = "";
           break;
+        }
         case "Pace": {
           const catchUpPercent = totals.goal > 0 ? Math.min(100, Math.abs(additionalElapsedNeededMs) / (totals.goal * 1000) * 100) : 0;
           const directionIsPositive = additionalElapsedNeededMs <= 0;
@@ -2421,18 +2443,18 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
           progressBarFill.style.width = `${fillWidth}%`;
           progressBarFill.style.backgroundColor = additionalElapsedNeededMs > 0 ? "orange" : additionalElapsedNeededMs < 0 ? "#2ecc71" : "";
           meta_info.children[1].textContent = `${Math.abs(additionalElapsedNeededMs) > 0 ? formatDuration(Math.abs(additionalElapsedNeededMs)) : "0s"}`;
-          meta_info.children[2].textContent = `${additionalElapsedNeededMs >= 5* 60 * 1000 ? "Need to work" : additionalElapsedNeededMs <= -5 * 60 * 1000 ? "Ahead of pace" : "On track"}`;
+          meta_info.children[2].textContent = `${additionalElapsedNeededMs >= 5 * 60 * 1000 ? "Need to work" : additionalElapsedNeededMs <= -5 * 60 * 1000 ? "Ahead of pace" : "On track"}`;
           break;
         }
         case "Needed pace to complete": {
           const DEFAULT_GREEN_HUE = 80;
-          const trueCurrentFreeTimeMs = initialFreeTimeMs - freeTimeUsedMs;
+          const trueCurrentFreeTimeMs = currentFreeTimeMs;
           const remainingWorkMs = Math.max(0, scaleGoalMs - rawElapsedMs);
           const baselineRatio = initialFreeTimeMs > 0 ? (scaleGoalMs / initialFreeTimeMs) : 0;
-          
+
           let ratioStr = "0.00x";
           let ratio = 0;
-          
+
           if (remainingWorkMs === 0) {
             ratioStr = "0.00x";
             ratio = 0;
@@ -2443,48 +2465,50 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
             ratio = remainingWorkMs / trueCurrentFreeTimeMs;
             ratioStr = `${ratio.toFixed(2)}x`;
           }
-          
+
           meta_info.children[1].textContent = ratioStr;
-          
+
           const wiggleRoomStr = trueCurrentFreeTimeMs < 0 ? `-${formatDuration(Math.abs(trueCurrentFreeTimeMs))}` : formatDuration(trueCurrentFreeTimeMs);
           meta_info.children[2].textContent = `${formatDuration(remainingWorkMs)} work / ${wiggleRoomStr} free time left`;
-          
+
           progressBarFill.style.transition = "width 0.3s ease, background-color 0.3s ease";
           progressBarFill.style.left = "0%";
-          
+
           const fillPercentage = remainingWorkMs === 0 ? 0 : (ratio === Infinity ? 100 : (ratio / (ratio + 1)) * 100);
           progressBarFill.style.width = `${fillPercentage}%`;
-          
+
           if (trueCurrentFreeTimeMs < 0) {
             progressBarFill.style.backgroundColor = "darkred";
           } else if (baselineRatio > 0) {
             const relativeRatio = ratio / baselineRatio;
-            const hueDrop = Math.max(0, relativeRatio - 1) * (DEFAULT_GREEN_HUE/2);
+            const hueDrop = Math.max(0, relativeRatio - 1) * (DEFAULT_GREEN_HUE / 2);
             const hue = Math.max(0, DEFAULT_GREEN_HUE - hueDrop);
-            
             progressBarFill.style.backgroundColor = `hsl(${hue}, 100%, 45%)`;
           } else {
-            progressBarFill.style.backgroundColor = `hsl(DEFAULT_GREEN_HUE, 100%, 45%)`;
+            progressBarFill.style.backgroundColor = `hsl(${DEFAULT_GREEN_HUE}, 100%, 45%)`; // FIXED: was a literal "DEFAULT_GREEN_HUE" string
           }
           break;
         }
-        case "Free time used":
+        case "Free time used": {
           meta_info.children[1].textContent = `${freeTimeUsedPercentage.toFixed(1)}%`;
           const wiggleRoomStr = currentFreeTimeMs < 0 ? `-${formatDuration(Math.abs(currentFreeTimeMs))}` : formatDuration(currentFreeTimeMs);
-          meta_info.children[2].textContent = `${formatDuration(freeTimeUsedMs)} / ${formatDuration(initialFreeTimeMs)} (${wiggleRoomStr} left)`;
+          meta_info.children[2].textContent = `${formatDuration(freeTimeUsedMs)} / ${formatDuration(Math.max(0, initialFreeTimeMs))} (${wiggleRoomStr} left)`;
           progressBarFill.style.left = "0%";
           progressBarFill.style.width = `${Math.min(100, freeTimeUsedPercentage)}%`;
           progressBarFill.style.backgroundColor = currentFreeTimeMs < 0 ? "darkred" : "";
           break;
-        case "Time":
+        }
+        case "Time": {
           meta_info.children[1].textContent = `${timePercentage.toFixed(1)}%`;
           meta_info.children[2].textContent = `${formatDuration(timeUsed)} / ${formatDuration(totalTimeMs)} (${formatDuration(Math.max(0, totalTimeMs - timeUsed))} left)`;
           progressBarFill.style.left = "0%";
           progressBarFill.style.width = `${Math.min(100, timePercentage)}%`;
           progressBarFill.style.backgroundColor = "";
           break;
+        }
       }
     });
+
     const streakCount = getTimeScaleStreak(scale.id) + (taskPercentage >= 100 ? 1 : 0);
     const streakBadge = timeScaleContainer.querySelector(".streak-badge");
     if (streakBadge) {
@@ -2492,14 +2516,6 @@ function UpdateTimeScalesRender(agendaData = state.agenda) {
       streakBadge.classList.toggle("inactive", streakCount === 0);
       const streakNumber = streakBadge.querySelector(".streak-number");
       if (streakNumber) streakNumber.textContent = streakCount;
-      const totals = Object.values(state.tasks).reduce((acc, task) => {
-        const time = task.times[scale.id];
-        const goal = getProgressGoal(task, scale.id);
-        const elapsed = getProgressElapsed(task, scale.id);
-        acc.elapsed += Math.min(elapsed, goal);
-        acc.goal += goal;
-        return acc;
-      }, { elapsed: 0, goal: 0 });
       const isCompleted = totals.goal > 0 && totals.elapsed >= totals.goal;
       streakBadge.classList.toggle("completed", isCompleted);
     }
