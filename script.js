@@ -2335,6 +2335,13 @@ function getScaleFreeTimeMs(scale, agendaData = state.agenda) {
   });
   required += Object.values(overflowByTask).reduce((a, b) => a + b, 0);
 
+  const workable = getWorkableTimeBetween(now, end, agendaData);
+  console.log(scale.name, {
+    workable: formatDuration(workable),
+    required: formatDuration(required),
+    free: formatDuration(workable - required)
+  });
+
   return getWorkableTimeBetween(now, end, agendaData) - required;
 }
 
