@@ -2243,13 +2243,12 @@ function simulateWorkAllocation(agendaData = state.agenda, horizonMs = null, onl
       while (C > 0 && activeJobs.length > 0) {
         activeJobs.sort((a, b) => a.cycleEndMs - b.cycleEndMs);
 
-        let primaryJob = activeJobs[0];
-        let alloc = Math.min(C, primaryJob.amountMs);
+        const primaryJob = activeJobs[0];
+        const alloc = Math.min(C, primaryJob.amountMs);
 
-        let relatedJobs = activeJobs.filter(j => j.taskId === primaryJob.taskId);
-        relatedJobs.forEach(j => {
-          j.amountMs -= alloc;
-        });
+        // FIXED: only reduce the job being worked on (its deficit already
+        // accounts for work covered by shorter scales)
+        primaryJob.amountMs -= alloc;
 
         C -= alloc;
 
@@ -2257,7 +2256,7 @@ function simulateWorkAllocation(agendaData = state.agenda, horizonMs = null, onl
           requiredWorkTodayMs += alloc;
         }
 
-        let newlyCompleted = activeJobs.filter(j => j.amountMs <= 0);
+        const newlyCompleted = activeJobs.filter(j => j.amountMs <= 0);
         newlyCompleted.forEach(job => pendingCompletedJobs.push(job));
 
         activeJobs = activeJobs.filter(j => j.amountMs > 0);
@@ -2630,7 +2629,7 @@ function getPastRequiredSlots(agendaData, overflowJobs) {
     let slotStartTime = slotStart.getTime();
 
     if (timeMarker === slotStartTime) { timeMarker -= 1; continue; }
-    
+
     const slotEndTime = timeMarker;
     const timeInThisSlot = slotEndTime - Math.max(slotStartTime, earliestCycleStart);
 
@@ -2640,7 +2639,7 @@ function getPastRequiredSlots(agendaData, overflowJobs) {
     let currentSlotIso = getSafeIsoString(slotStart);
     let agendaItem = agendaData[currentSlotIso];
     let isBusy = agendaItem ? agendaItem.busy : false;
-    
+
     let workedInSlotMs = 0;
     if (agendaItem && agendaItem.tasksWorked) {
       workedInSlotMs = Object.values(agendaItem.tasksWorked).reduce((sum, val) => sum + val, 0) * 1000;
@@ -2651,13 +2650,11 @@ function getPastRequiredSlots(agendaData, overflowJobs) {
       let allocatedInSlot = 0;
 
       while (capacity > 0 && activeJobs.length > 0) {
-        let primaryJob = activeJobs[0];
-        let alloc = Math.min(capacity, primaryJob.amountMs);
+        const primaryJob = activeJobs[0];
+        const alloc = Math.min(capacity, primaryJob.amountMs);
 
-        let relatedJobs = activeJobs.filter(j => j.taskId === primaryJob.taskId);
-        relatedJobs.forEach(j => {
-          j.amountMs -= alloc;
-        });
+        // FIXED: only reduce the job being worked on
+        primaryJob.amountMs -= alloc;
 
         capacity -= alloc;
         allocatedInSlot += alloc;
@@ -2669,10 +2666,10 @@ function getPastRequiredSlots(agendaData, overflowJobs) {
         pastRequiredSlotMs.set(currentSlotIso, allocatedInSlot);
       }
     }
-    
+
     timeMarker -= timeInThisSlot;
   }
-  
+
   return pastRequiredSlotMs;
 }
 
